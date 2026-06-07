@@ -1,5 +1,5 @@
 import { asgardeo } from "@asgardeo/nextjs/server";
-import IncidentMapPage from "./incident-map-page";
+import { AppSidebar } from "./app-sidebar";
 
 async function getAccessToken() {
   const client = await asgardeo();
@@ -7,7 +7,7 @@ async function getAccessToken() {
   return await client.getAccessToken(sessionId);
 }
 
-export default async function MapPage() {
+export async function AppSidebarServer(props) {
   const accessToken = await getAccessToken();
-  return <IncidentMapPage accessToken={accessToken} />;
+  return <AppSidebar accessToken={accessToken} {...props} />;
 }

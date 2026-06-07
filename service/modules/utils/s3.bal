@@ -1,23 +1,18 @@
 import ballerina/http;
-import ballerina/io;
 import ballerina/mime;
 import ballerina/regex as re;
 import ballerina/time;
-import ballerina/url;
-import ballerinax/aws.s3;
 
-configurable string accessKeyId = ?;
-configurable string secretAccessKey = ?;
-configurable string region = ?;
+configurable string cloudflareApiToken = ?;
+configurable string accountId = ?;
 configurable string bucketName = ?;
+configurable string r2PublicUrl = ?;
 
-s3:ConnectionConfig amazonS3Config = {
-    accessKeyId: accessKeyId,
-    secretAccessKey: secretAccessKey,
-    region: region
-};
-
-final s3:Client s3Client = check new (amazonS3Config);
+final http:Client r2Client = check new ("https://api.cloudflare.com",
+    config = {
+        timeout: 60
+    }
+);
 
 final readonly & map<string> imageTypes = {
     "png": "image/png",
@@ -35,7 +30,7 @@ public type ImageUploadResult record {
 
 public type ImageData record {
     string filename;
-    string s3Path;
+    string r2Path;
     string uploadedAt;
     string url;
 };
@@ -54,166 +49,115 @@ public type ImageInfo record {
 };
 
 isolated function generateCleanFileName(string originalFileName) returns string {
-    time:Utc currentTime = time:utcNow();
-    string timestamp = currentTime.toString();
-    string cleanTimestamp = re:replaceAll(timestamp, "[^0-9]", "");
-    string[] nameParts = re:split(originalFileName, "\\.");
-    string extension = nameParts.length() > 1 ? nameParts[nameParts.length() - 1] : "jpg";
-    return string `${cleanTimestamp}.${extension}`;
+    string ts = re:replaceAll(time:utcNow().toString(), "[^0-9]", "");
+    string[] parts = re:split(originalFileName, "\\.");
+    string ext = parts.length() > 1 ? parts[parts.length() - 1] : "jpg";
+    return string `${ts}.${ext}`;
 }
 
-public isolated function uploadImageToS3(http:Request req) returns ImageUploadResult|error {
-    mime:Entity[]|http:ClientError bodyParts = req.getBodyParts();
-    if bodyParts is error {
-        return {success: false, message: "error passing multipart dataa"};
-    }
+isolated function getContentType(string fileName) returns string {
+    string[] parts = re:split(fileName, "\\.");
+    string ext = parts.length() > 1 ? parts[parts.length() - 1].toLowerAscii() : "jpg";
+    return imageTypes[ext] ?: "application/octet-stream";
+}
 
+isolated function uploadToR2(byte[] imageContent, string objectKey, string ctype) returns error? {
+    string path = string `/client/v4/accounts/${accountId}/r2/buckets/${bucketName}/objects/${objectKey}`;
+
+    http:Request uploadReq = new;
+
+    uploadReq.setBinaryPayload(imageContent, contentType = ctype);
+
+    uploadReq.setHeader("Authorization", "Bearer " + cloudflareApiToken);
+
+    http:Response res = check r2Client->put(path, uploadReq);
+
+    if res.statusCode != 200 {
+        return error(string `R2 upload failed: ${res.statusCode}`);
+    }
+}
+
+public isolated function uploadImageToR2(http:Request req) returns ImageUploadResult|error {
+    mime:Entity[] bodyParts = check req.getBodyParts();
     byte[] imageContent = [];
-    string fileName = "";
+    string fileName = "image.jpg";
+
     foreach mime:Entity part in bodyParts {
-        mime:ContentDisposition contentDisposition = part.getContentDisposition();
-        if contentDisposition.name == "image" {
-            byte[]|error content = part.getByteArray();
-            if content is byte[] {
-                imageContent = content;
-                fileName = contentDisposition.fileName is string ? contentDisposition.fileName : "image.jpg";
+        mime:ContentDisposition cd = part.getContentDisposition();
+        if cd.name == "image" {
+            imageContent = check part.getByteArray();
+            string cdFileName = cd.fileName;
+            if cdFileName != "" {
+                fileName = cdFileName;
             }
         }
     }
 
     if imageContent.length() == 0 {
-        return {success: false, message: "img file 404"};
+        return {success: false, message: "image file not found"};
     }
 
     string[] parts = re:split(fileName, "\\.");
     if parts.length() < 2 || !imageTypes.hasKey(parts[parts.length() - 1].toLowerAscii()) {
-        return {success: false, message: "invalid img type"};
+        return {success: false, message: "invalid image type"};
     }
 
-    string cleanFileName = generateCleanFileName(fileName);
-    string s3ObjectPath = "uploads/" + cleanFileName;
-
-    error? uploadResult = s3Client->createObject(bucketName, s3ObjectPath, imageContent);
-    if uploadResult is error {
-        return {success: false, message: "failed to upload s3: " + uploadResult.message()};
-    }
+    string key = "uploads/" + generateCleanFileName(fileName);
+    check uploadToR2(imageContent, key, getContentType(fileName));
 
     return {
         success: true,
         message: "image upload success",
-        data: {
-            filename: cleanFileName,
-            s3Path: s3ObjectPath,
-            uploadedAt: time:utcNow().toString(),
-            url: string `https://${bucketName}.s3.${region}.amazonaws.com/${s3ObjectPath}`
-        }
+        data: {filename: key, r2Path: key, uploadedAt: time:utcNow().toString(), url: string `${r2PublicUrl}/${key}`}
     };
 }
 
-//img>1
 public isolated function uploadImageFromPart(mime:Entity part) returns ImageUploadResult|error {
-    mime:ContentDisposition contentDisposition = part.getContentDisposition();
-    string fileName = contentDisposition.fileName is string ? contentDisposition.fileName : "image.jpg";
-
-    byte[]|error content = part.getByteArray();
-    if content is error {
-        return {success: false, message: "error getting img contentn"};
-    }
-
-    byte[] imageContent = content;
+    mime:ContentDisposition cd = part.getContentDisposition();
+    string cdFileName = cd.fileName;
+    string fileName = cdFileName != "" ? cdFileName : "image.jpg";
+    byte[] imageContent = check part.getByteArray();
 
     if imageContent.length() == 0 {
-        return {success: false, message: "img content 404"};
+        return {success: false, message: "image content is empty"};
     }
 
     string[] parts = re:split(fileName, "\\.");
     if parts.length() < 2 || !imageTypes.hasKey(parts[parts.length() - 1].toLowerAscii()) {
-        return {success: false, message: "invalid img type"};
+        return {success: false, message: "invalid image type"};
     }
 
-    string cleanFileName = generateCleanFileName(fileName);
-    string s3ObjectPath = "uploads/" + cleanFileName;
-
-    error? uploadResult = s3Client->createObject(bucketName, s3ObjectPath, imageContent);
-    if uploadResult is error {
-        return {success: false, message: "failed to uplod o s3: " + uploadResult.message()};
-    }
+    string key = "uploads/" + generateCleanFileName(fileName);
+    check uploadToR2(imageContent, key, getContentType(fileName));
 
     return {
         success: true,
-        message: "img uploaded successfully",
-        data: {
-            filename: cleanFileName,
-            s3Path: s3ObjectPath,
-            uploadedAt: time:utcNow().toString(),
-            url: string `https://${bucketName}.s3.${region}.amazonaws.com/${s3ObjectPath}`
-        }
+        message: "image uploaded successfully",
+        data: {filename: key, r2Path: key, uploadedAt: time:utcNow().toString(), url: string `${r2PublicUrl}/${key}`}
     };
 }
 
-public function listImagesFromS3() returns ImageListResult|error {
-    s3:S3Object[]|error listResult = s3Client->listObjects(bucketName, prefix = "uploads/");
-    if listResult is error {
-        return {success: false, message: "Failed to list images: " + listResult.message()};
+public isolated function listImagesFromR2() returns ImageListResult|error {
+    string path = string `/client/v4/accounts/${accountId}/r2/buckets/${bucketName}/objects?prefix=uploads/`;
+    map<string|string[]> headers = {"Authorization": "Bearer " + cloudflareApiToken};
+    http:Response res = check r2Client->get(path, headers);
+    json payload = check res.getJsonPayload();
+    json resultJson = check payload.result;
+    json[]|error objectsResult = resultJson.ensureType();
+    json[] objects = objectsResult is json[] ? objectsResult : [];
+
+    ImageInfo[] images = [];
+    foreach json obj in objects {
+        json keyJson = check obj.key;
+        json sizeJson = check obj.size;
+        json lastModJson = check obj.last_modified;
+        string objKey = keyJson.toString();
+        images.push({
+            name: objKey,
+            size: sizeJson.toString(),
+            lastModified: lastModJson.toString(),
+            url: string `${r2PublicUrl}/${objKey}`
+        });
     }
-
-    ImageInfo[] imageInfos = [];
-    foreach s3:S3Object obj in listResult {
-        string? objectNameOptional = obj.objectName;
-        string? objectSizeOptional = obj.objectSize;
-        string? lastModifiedOptional = obj.lastModified;
-
-        string objectName = objectNameOptional ?: "unknown";
-        string objectSize = objectSizeOptional ?: "0";
-        string lastModified = lastModifiedOptional ?: "";
-
-        string decodedUrl = decodeS3Url(string `https://${bucketName}.s3.${region}.amazonaws.com/${objectName}`);
-
-        ImageInfo imageInfo = {
-            name: objectName,
-            size: objectSize,
-            lastModified: lastModified,
-            url: decodedUrl
-        };
-        imageInfos.push(imageInfo);
-    }
-
-    return {
-        success: true,
-        images: imageInfos
-    };
-}
-
-public function getImageFromS3(string filename) returns http:Response|error {
-    http:Response response = new;
-    response.setHeader("Access-Control-Allow-Origin", "*");
-
-    stream<byte[], io:Error?>|error downloadResult = s3Client->getObject(bucketName, "uploads/" + filename);
-    if downloadResult is error {
-        response.statusCode = 404;
-        response.setTextPayload("Image not found");
-        return response;
-    }
-
-    byte[] imageContent = [];
-    error? streamResult = downloadResult.forEach(function(byte[] chunk) {
-        imageContent.push(...chunk);
-    });
-
-    if streamResult is error {
-        response.statusCode = 500;
-        response.setTextPayload("Error reading image");
-        return response;
-    }
-
-    string[] parts = re:split(filename, "\\.");
-    string extension = parts.length() > 1 ? parts[parts.length() - 1].toLowerAscii() : "jpg";
-    response.setHeader("Content-Type", imageTypes[extension] ?: "image/jpeg");
-    response.setBinaryPayload(imageContent);
-    return response;
-}
-
-function decodeS3Url(string s3Url) returns string {
-    string|error decodedUrl = url:decode(s3Url, "UTF-8");
-    return decodedUrl is string ? decodedUrl : s3Url;
+    return {success: true, images: images};
 }

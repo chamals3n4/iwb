@@ -13,13 +13,8 @@ public isolated function getAllCities() returns CityListResponse|error {
     if dbResult is sql:Error {
         return {success: false, message: "Failed to fetch cities: " + dbResult.message()};
     }
-
-    CityBasic[] cities = [];
-    foreach CityRecord cityRecord in dbResult {
-        CityBasic city = mapCityRecordToCityBasic(cityRecord);
-        cities.push(city);
-    }
-
+    CityBasic[] cities = from CityRecord r in dbResult
+        select mapCityRecordToCityBasic(r);
     return {success: true, message: "Cities fetched successfully", data: cities};
 }
 
@@ -196,20 +191,15 @@ public isolated function getCityChat(string cityId) returns CityChatResponse|err
     if dbResult is sql:Error {
         return {success: false, message: "Failed to fetch chat messages: " + dbResult.message()};
     }
-
-    CityChatMessage[] messages = [];
-    foreach CityChatRecord chatRecord in dbResult {
-        CityChatMessage message = {
-            messageId: chatRecord.message_id,
-            cityId: chatRecord.city_id,
-            userId: chatRecord.user_id,
-            userName: chatRecord.user_name,
-            message: chatRecord.message,
-            createdAt: chatRecord.created_at
+    CityChatMessage[] messages = from CityChatRecord r in dbResult
+        select {
+            messageId: r.message_id,
+            cityId: r.city_id,
+            userId: r.user_id,
+            userName: r.user_name,
+            message: r.message,
+            createdAt: r.created_at
         };
-        messages.push(message);
-    }
-
     return {success: true, message: "Chat messages fetched successfully", data: messages};
 }
 
@@ -242,216 +232,59 @@ public isolated function postCityChat(string cityId, CityChatRequest chatRequest
     return {success: true, message: "Message sent successfully"};
 }
 
-// helpers
 isolated function generateSlug(string name) returns string {
-    string lowercaseName = name.toLowerAscii();
-    string slug = regex:replaceAll(lowercaseName, "[^a-z0-9]", "-");
+    string slug = regex:replaceAll(name.toLowerAscii(), "[^a-z0-9]", "-");
     return regex:replaceAll(slug, "-+", "-").trim();
 }
 
-isolated function mapCityRecordToCityBasic(CityRecord cityRecord) returns CityBasic {
-    string[] urls = cityRecord.image_urls is string && cityRecord.image_urls != "" ?
-        regex:split(<string>cityRecord.image_urls, ",") : [];
-
+isolated function mapCityRecordToCityBasic(CityRecord r) returns CityBasic {
+    string[] urls = r.image_urls is string && r.image_urls != "" ? regex:split(<string>r.image_urls, ",") : [];
     return {
-        cityId: cityRecord.city_id,
-        name: cityRecord.name,
-        slug: cityRecord.slug,
-        overallRating: cityRecord.overall_rating,
-        category: cityRecord.category,
-        description: cityRecord.description,
+        cityId: r.city_id,
+        name: r.name,
+        slug: r.slug,
+        overallRating: r.overall_rating,
+        category: r.category,
+        description: r.description,
         firstImageUrl: urls.length() > 0 ? urls[0] : (),
-        rankPosition: cityRecord.rank_position
+        rankPosition: r.rank_position
     };
 }
 
-isolated function mapCityRecordToCity(CityRecord cityRecord, CityRatingBreakdown? ratingsBreakdown) returns City {
+isolated function mapCityRecordToCity(CityRecord r, CityRatingBreakdown? ratingsBreakdown) returns City {
     string[]? amenities = ();
-    if cityRecord.amenities is string && cityRecord.amenities != "" {
-        json|error amenitiesJson = cityRecord.amenities ?: "".fromJsonString();
+    if r.amenities is string && r.amenities != "" {
+        json|error amenitiesJson = (r.amenities ?: "").fromJsonString();
         if amenitiesJson is json[] {
-            string[] tempAmenities = [];
-            foreach json amenity in amenitiesJson {
-                if amenity is string {
-                    tempAmenities.push(amenity);
+            string[] temp = [];
+            foreach json a in amenitiesJson {
+                if a is string {
+                    temp.push(a);
                 }
             }
-            amenities = tempAmenities;
+            amenities = temp;
         }
     }
-
-    string[]? imageUrls = cityRecord.image_urls is string && cityRecord.image_urls != ""
-        ? regex:split(<string>cityRecord.image_urls, ",")
-        : ();
-
+    string[]? imageUrls = r.image_urls is string && r.image_urls != "" ? regex:split(<string>r.image_urls, ",") : ();
     return {
-        cityId: cityRecord.city_id,
-        name: cityRecord.name,
-        slug: cityRecord.slug,
-        province: cityRecord.province,
-        description: cityRecord.description,
-        category: cityRecord.category,
-        latitude: cityRecord.latitude,
-        longitude: cityRecord.longitude,
-        costOfLiving: cityRecord.cost_of_living,
-        temperature: cityRecord.temperature,
-        population: cityRecord.population,
+        cityId: r.city_id,
+        name: r.name,
+        slug: r.slug,
+        province: r.province,
+        description: r.description,
+        category: r.category,
+        latitude: r.latitude,
+        longitude: r.longitude,
+        costOfLiving: r.cost_of_living,
+        temperature: r.temperature,
+        population: r.population,
         amenities: amenities,
         imageUrls: imageUrls,
-        overallRating: cityRecord.overall_rating,
-        totalRatings: cityRecord.total_ratings,
-        rankPosition: cityRecord.rank_position,
-        createdAt: cityRecord.created_at,
-        updatedAt: cityRecord.updated_at,
+        overallRating: r.overall_rating,
+        totalRatings: r.total_ratings,
+        rankPosition: r.rank_position,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
         ratingsBreakdown: ratingsBreakdown
     };
-}
-
-// db queries
-
-isolated function getAllCitiesFromDb() returns CityRecord[]|sql:Error {
-    sql:ParameterizedQuery selectQuery = `
-        SELECT city_id, name, slug, province, description, category, latitude, longitude,
-               cost_of_living, temperature, population, amenities, image_urls,
-               overall_rating, total_ratings, rank_position, created_at, updated_at
-        FROM cities 
-        ORDER BY rank_position ASC, overall_rating DESC, name ASC
-    `;
-
-    stream<CityRecord, sql:Error?> cityStream = utils:dbClient->query(selectQuery, CityRecord);
-    CityRecord[] cities = check from var city in cityStream
-        select city;
-    return cities;
-}
-
-isolated function getCityBySlugFromDb(string slug) returns CityRecord|sql:Error {
-    sql:ParameterizedQuery selectQuery = `
-        SELECT city_id, name, slug, province, description, category, latitude, longitude,
-               cost_of_living, temperature, population, amenities, image_urls,
-               overall_rating, total_ratings, rank_position, created_at, updated_at
-        FROM cities 
-        WHERE slug = ${slug}
-    `;
-
-    return utils:dbClient->queryRow(selectQuery);
-}
-
-isolated function getCityByIdFromDb(string cityId) returns CityRecord|sql:Error {
-    sql:ParameterizedQuery selectQuery = `
-        SELECT city_id, name, slug, province, description, category, latitude, longitude,
-               cost_of_living, temperature, population, amenities, image_urls,
-               overall_rating, total_ratings, rank_position, created_at, updated_at
-        FROM cities 
-        WHERE city_id = ${cityId}
-    `;
-
-    return utils:dbClient->queryRow(selectQuery);
-}
-
-isolated function insertCity(CityInsert cityData) returns sql:ExecutionResult|sql:Error {
-    sql:ParameterizedQuery insertQuery = `
-        INSERT INTO cities (
-            city_id, name, slug, province, description, category, latitude, longitude,
-            cost_of_living, temperature, population, amenities, image_urls, 
-            overall_rating, total_ratings, rank_position, created_at, updated_at
-        ) VALUES (
-            ${cityData.cityId}, ${cityData.name}, ${cityData.slug}, ${cityData.province},
-            ${cityData.description}, ${cityData.category}, ${cityData.latitude}, ${cityData.longitude},
-            ${cityData.costOfLiving}, ${cityData.temperature}, ${cityData.population},
-            ${cityData.amenities}, ${cityData.imageUrls}, 0.0, 0, 0,
-            ${cityData.createdAt}, ${cityData.updatedAt}
-        )
-    `;
-
-    return utils:dbClient->execute(insertQuery);
-}
-
-isolated function insertCityRating(CityRatingInsert ratingData) returns sql:ExecutionResult|sql:Error {
-    sql:ParameterizedQuery insertQuery = `
-        INSERT INTO city_ratings (
-            rating_id, city_id, user_id, cost_of_living_rating, safety_rating,
-            transportation_rating, healthcare_rating, food_rating, nightlife_rating,
-            culture_rating, outdoor_activities_rating, review_text, created_at
-        ) VALUES (
-            ${ratingData.ratingId}, ${ratingData.cityId}, ${ratingData.userId},
-            ${ratingData.costOfLivingRating}, ${ratingData.safetyRating},
-            ${ratingData.transportationRating}, ${ratingData.healthcareRating},
-            ${ratingData.foodRating}, ${ratingData.nightlifeRating},
-            ${ratingData.cultureRating}, ${ratingData.outdoorActivitiesRating},
-            ${ratingData.reviewText}, ${ratingData.createdAt}
-        )
-    `;
-
-    return utils:dbClient->execute(insertQuery);
-}
-
-isolated function getCityRatingAverages(string cityId) returns CityRatingAverages|sql:Error {
-    sql:ParameterizedQuery selectQuery = `
-        SELECT 
-            COALESCE(AVG(cost_of_living_rating), 0) as cost_of_living_avg,
-            COALESCE(AVG(safety_rating), 0) as safety_avg,
-            COALESCE(AVG(transportation_rating), 0) as transportation_avg,
-            COALESCE(AVG(healthcare_rating), 0) as healthcare_avg,
-            COALESCE(AVG(food_rating), 0) as food_avg,
-            COALESCE(AVG(nightlife_rating), 0) as nightlife_avg,
-            COALESCE(AVG(culture_rating), 0) as culture_avg,
-            COALESCE(AVG(outdoor_activities_rating), 0) as outdoor_activities_avg
-        FROM city_ratings 
-        WHERE city_id = ${cityId}
-    `;
-
-    return utils:dbClient->queryRow(selectQuery);
-}
-
-isolated function updateCityOverallRating(string cityId) returns error? {
-    sql:ParameterizedQuery calculateQuery = `
-        UPDATE cities 
-        SET 
-            overall_rating = (
-                SELECT COALESCE(AVG((cost_of_living_rating + safety_rating + transportation_rating + 
-                                   healthcare_rating + food_rating + nightlife_rating + 
-                                   culture_rating + outdoor_activities_rating) / 8.0), 0)
-                FROM city_ratings 
-                WHERE city_id = ${cityId}
-            ),
-            total_ratings = (
-                SELECT COUNT(*) 
-                FROM city_ratings 
-                WHERE city_id = ${cityId}
-            ),
-            updated_at = ${time:utcNow().toString()}
-        WHERE city_id = ${cityId}
-    `;
-
-    sql:ExecutionResult|sql:Error result = utils:dbClient->execute(calculateQuery);
-    if result is sql:Error {
-        return error("Failed to update city overall rating: " + result.message());
-    }
-}
-
-isolated function getCityChatMessagesFromDb(string cityId) returns CityChatRecord[]|sql:Error {
-    sql:ParameterizedQuery selectQuery = `
-        SELECT message_id, city_id, user_id, user_name, message, created_at
-        FROM city_chat 
-        WHERE city_id = ${cityId}
-        ORDER BY created_at ASC
-    `;
-
-    stream<CityChatRecord, sql:Error?> chatStream = utils:dbClient->query(selectQuery, CityChatRecord);
-    CityChatRecord[] messages = check from var message in chatStream
-        select message;
-    return messages;
-}
-
-isolated function insertCityChatMessage(CityChatInsert chatData) returns sql:ExecutionResult|sql:Error {
-    sql:ParameterizedQuery insertQuery = `
-        INSERT INTO city_chat (
-            message_id, city_id, user_id, user_name, message, created_at
-        ) VALUES (
-            ${chatData.messageId}, ${chatData.cityId}, ${chatData.userId},
-            ${chatData.userName}, ${chatData.message}, ${chatData.createdAt}
-        )
-    `;
-
-    return utils:dbClient->execute(insertQuery);
 }

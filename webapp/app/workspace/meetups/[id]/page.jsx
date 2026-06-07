@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useSession } from "next-auth/react";
+import { User } from "@asgardeo/nextjs";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,15 +19,11 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import { getAuthHeaders } from "@/lib/api"
 
 const API_BASE_URL = "http://localhost:8080";
 const WS_BASE_URL = "ws://localhost:9090";
 
-export default function MeetupDetailsPage({ params: paramsPromise }) {
-  const params = React.use(paramsPromise);
-  const { data: session } = useSession();
-  console.log("Session data:", session);
+function MeetupDetailsPageInner({ params, user }) {
   const [meetup, setMeetup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -44,17 +40,18 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
   const reconnectTimeoutRef = useRef(null);
 
   const currentUser = {
-    id: session?.user?.email || "guest-" + Math.random().toString(36).substr(2, 9),
+    id:
+      user?.sub ||
+      user?.email ||
+      "guest-" + Math.random().toString(36).substr(2, 9),
     name:
-      (session?.user?.given_name && session?.user?.family_name
-        ? `${session.user.given_name.trim()} ${session.user.family_name.trim()}`
-        : session?.user?.given_name
-          ? session.user.given_name.trim()
-          : session?.user?.family_name
-            ? session.user.family_name.trim()
-            : session?.user?.email
-              ? session.user.email
-              : "Guest User"),
+      user?.given_name && user?.family_name
+        ? `${user.given_name.trim()} ${user.family_name.trim()}`
+        : user?.given_name?.trim()
+          ? user.given_name.trim()
+          : user?.family_name?.trim()
+            ? user.family_name.trim()
+            : user?.email || "Guest User",
   };
 
   const fetchMeetupDetails = async () => {
@@ -62,7 +59,7 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
       setLoading(true);
       setError("");
 
-      const response = await fetch(`${API_BASE_URL}/api/meetups/${params.id}`, { headers: getAuthHeaders(session) });
+      const response = await fetch(`${API_BASE_URL}/api/meetups/${params.id}`);
       const data = await response.json();
 
       if (response.ok) {
@@ -87,7 +84,6 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
       setLoadingHistory(true);
       const response = await fetch(
         `${API_BASE_URL}/api/chat/history/${params.id}`,
-        { headers: getAuthHeaders(session) }
       );
       const data = await response.json();
 
@@ -119,18 +115,17 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log("WebSocket connected");
         setChatConnected(true);
-
-        const joinMessage = {
-          type: "join",
-          data: {
-            meetupId: params.id,
-            userId: currentUser.id,
-            userName: currentUser.name,
-          },
-        };
-        ws.send(JSON.stringify(joinMessage));
+        ws.send(
+          JSON.stringify({
+            type: "join",
+            data: {
+              meetupId: params.id,
+              userId: currentUser.id,
+              userName: currentUser.name,
+            },
+          }),
+        );
       };
 
       ws.onmessage = (event) => {
@@ -148,10 +143,8 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
             };
 
             setMessages((prev) => {
-              const messageExists = prev.some(msg => msg.id === newMsg.id);
-              if (messageExists) {
-                return prev;
-              }
+              const messageExists = prev.some((msg) => msg.id === newMsg.id);
+              if (messageExists) return prev;
               return [...prev, newMsg];
             });
           }
@@ -161,12 +154,11 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
       };
 
       ws.onclose = () => {
-        console.log("WebSocket disconnected");
         setChatConnected(false);
-
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connectWebSocket();
-        }, 3000);
+        reconnectTimeoutRef.current = setTimeout(
+          () => connectWebSocket(),
+          3000,
+        );
       };
 
       ws.onerror = (error) => {
@@ -181,16 +173,15 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
 
   const formatTimestamp = (timestamp) => {
     try {
-      console.log("Raw timestamp:", timestamp);
       let date;
       if (Array.isArray(timestamp) && timestamp.length > 0) {
-        date = new Date(timestamp[0] * 1000 + Math.floor((timestamp[1] || 0) / 1e6));
+        date = new Date(
+          timestamp[0] * 1000 + Math.floor((timestamp[1] || 0) / 1e6),
+        );
       } else {
         date = new Date(timestamp);
       }
-      if (isNaN(date.getTime())) {
-        return "";
-      }
+      if (isNaN(date.getTime())) return "";
       return date.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
@@ -254,30 +245,27 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
 
   const handleSendMessage = (e) => {
     e.preventDefault();
-
     if (
       !newMessage.trim() ||
       !wsRef.current ||
       wsRef.current.readyState !== WebSocket.OPEN ||
       isSending
-    ) {
+    )
       return;
-    }
 
     setIsSending(true);
-
-    const messageData = {
-      type: "message",
-      data: {
-        meetupId: params.id,
-        userId: currentUser.id,
-        userName: currentUser.name,
-        message: newMessage.trim(),
-      },
-    };
-
     try {
-      wsRef.current.send(JSON.stringify(messageData));
+      wsRef.current.send(
+        JSON.stringify({
+          type: "message",
+          data: {
+            meetupId: params.id,
+            userId: currentUser.id,
+            userName: currentUser.name,
+            message: newMessage.trim(),
+          },
+        }),
+      );
       setNewMessage("");
     } catch (error) {
       console.error("Error sending message:", error);
@@ -295,14 +283,10 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
       loadChatHistory();
       connectWebSocket();
     }
-
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
+      if (wsRef.current) wsRef.current.close();
+      if (reconnectTimeoutRef.current)
         clearTimeout(reconnectTimeoutRef.current);
-      }
     };
   }, [meetup, params.id]);
 
@@ -331,11 +315,9 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
               {error}
             </AlertDescription>
           </Alert>
-          <div className="space-x-4">
-            <Button onClick={fetchMeetupDetails} variant="outline">
-              Try Again
-            </Button>
-          </div>
+          <Button onClick={fetchMeetupDetails} variant="outline">
+            Try Again
+          </Button>
         </div>
       </div>
     );
@@ -359,7 +341,6 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
   const { time } = formatDateTime(meetup.eventStartDate, meetup.eventStartTime);
   const estimatedAttendees = getEstimatedAttendees(meetup);
 
-  // vercel style gradient avatar
   function hashCode(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -376,16 +357,14 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
   }
 
   function vercelGradient(str) {
-    const color1 = getColor(str, 0);
-    const color2 = getColor(str, 1);
-    return `linear-gradient(135deg, ${color1}, ${color2})`;
+    return `linear-gradient(135deg, ${getColor(str, 0)}, ${getColor(str, 1)})`;
   }
 
   function getInitials(name) {
     return name
-      .split(' ')
+      .split(" ")
       .map((n) => n[0])
-      .join('')
+      .join("")
       .toUpperCase()
       .slice(0, 2);
   }
@@ -420,14 +399,11 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
             <div className="relative mb-8">
               <div className="relative overflow-hidden rounded-2xl">
                 <img
-                  src={
-                    meetup.imageUrl || "/images/hero.avif"
-                  }
+                  src={meetup.imageUrl || "/images/hero.avif"}
                   alt={meetup.eventName}
                   className="w-full h-72 object-cover"
                   onError={(e) => {
-                    e.currentTarget.src =
-                      "/images/hero.avif";
+                    e.currentTarget.src = "/images/hero.avif";
                   }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
@@ -458,7 +434,6 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
               </div>
             </div>
 
-            {/* Event Details */}
             <div className="bg-white rounded-2xl p-8 mb-6 border border-gray-100">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="flex items-start gap-4">
@@ -472,7 +447,6 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
                     </p>
                   </div>
                 </div>
-
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-gray-50 rounded-xl">
                     <Clock className="w-6 h-6 text-black" />
@@ -482,7 +456,6 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
                     <p className="text-gray-600">{time}</p>
                   </div>
                 </div>
-
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-gray-50 rounded-xl">
                     <Users className="w-6 h-6 text-black" />
@@ -518,10 +491,7 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
 
               <Button
                 onClick={() => setIsJoined(!isJoined)}
-                className={`w-full md:w-auto px-8 py-3 text-base font-semibold rounded-xl transition-all ${isJoined
-                  ? "bg-green-600 hover:bg-green-700 text-white"
-                  : "bg-black hover:bg-gray-800 text-white"
-                  }`}
+                className={`w-full md:w-auto px-8 py-3 text-base font-semibold rounded-xl transition-all ${isJoined ? "bg-green-600 hover:bg-green-700 text-white" : "bg-black hover:bg-gray-800 text-white"}`}
               >
                 {isJoined ? "✓ Joined" : "Join Meetup"}
               </Button>
@@ -554,7 +524,7 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
               <div className="prose prose-gray max-w-none">
                 <p className="text-gray-700 leading-relaxed text-base">
                   {meetup.eventDescription ||
-                    "Join us for this exciting meetup! We'll have great discussions, networking opportunities, and a chance to connect with like-minded individuals. This event is perfect for anyone interested in learning, sharing knowledge, and building meaningful connections in our community."}
+                    "Join us for this exciting meetup! We'll have great discussions, networking opportunities, and a chance to connect with like-minded individuals."}
                 </p>
               </div>
             </div>
@@ -562,7 +532,6 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
 
           <div className="lg:col-span-1">
             <div className="bg-white rounded-2xl border border-gray-100 h-full flex flex-col">
-              {/* Chat Header */}
               <div className="p-6 border-b border-gray-100">
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-xl font-bold text-black">Live Chat</h2>
@@ -573,8 +542,7 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
                       <WifiOff className="w-4 h-4 text-red-500" />
                     )}
                     <span
-                      className={`text-xs ${chatConnected ? "text-green-600" : "text-red-600"
-                        }`}
+                      className={`text-xs ${chatConnected ? "text-green-600" : "text-red-600"}`}
                     >
                       {chatConnected ? "Connected" : "Disconnected"}
                     </span>
@@ -585,7 +553,6 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
                 </p>
               </div>
 
-              {/* Messages Container - Fixed Height with Scroll */}
               <div
                 ref={chatContainerRef}
                 className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0 custom-scrollbar"
@@ -617,20 +584,18 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
                     <div
                       className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-base"
                       style={{
-                        background: vercelGradient(message.userId || message.user || "guest"),
+                        background: vercelGradient(
+                          message.userId || message.user || "guest",
+                        ),
                       }}
                       title={message.user}
                     >
+                      {getInitials(message.user)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span
-                          className={`font-semibold text-sm ${message.userId === currentUser.id
-                            ? "text-blue-600"
-                            : message.isOrganizer
-                              ? "text-purple-600"
-                              : "text-black"
-                            }`}
+                          className={`font-semibold text-sm ${message.userId === currentUser.id ? "text-blue-600" : message.isOrganizer ? "text-purple-600" : "text-black"}`}
                         >
                           {message.userId === currentUser.id
                             ? "You"
@@ -654,7 +619,6 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Message Input - Fixed at Bottom */}
               <div className="p-6 border-t border-gray-100">
                 <form onSubmit={handleSendMessage} className="flex gap-3">
                   <Input
@@ -692,5 +656,13 @@ export default function MeetupDetailsPage({ params: paramsPromise }) {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function MeetupDetailsPage({ params }) {
+  return (
+    <User>
+      {(user) => <MeetupDetailsPageInner params={params} user={user} />}
+    </User>
   );
 }

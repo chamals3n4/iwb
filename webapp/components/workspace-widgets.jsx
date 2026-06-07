@@ -19,20 +19,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Cloud, MapPin, ArrowLeftRight } from "lucide-react";
-
 import {
   fetchLatestNews,
   fetchWeather,
   fetchCurrencyConversion,
 } from "@/lib/tools";
-import { useSession } from "next-auth/react";
 
 export function WorkspaceWidgets() {
   const browserTimeZone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const { data: session } = useSession();
-  //console.log("Session:", session);
-  //console.log("Access token:", session?.access_token);
   const [fromTimeZone, setFromTimeZone] = useState(browserTimeZone);
   const [toTimeZone, setToTimeZone] = useState("UTC");
   const [now, setNow] = useState(new Date());
@@ -44,7 +39,6 @@ export function WorkspaceWidgets() {
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState(null);
 
-  // Currency conversion state
   const [currencyData, setCurrencyData] = useState(null);
   const [currencyLoading, setCurrencyLoading] = useState(false);
   const [currencyError, setCurrencyError] = useState(null);
@@ -59,7 +53,7 @@ export function WorkspaceWidgets() {
       case "clouds":
         return Cloud;
       case "clear":
-        return Cloud; //later
+        return Cloud;
       case "rain":
         return Cloud;
       default:
@@ -67,7 +61,6 @@ export function WorkspaceWidgets() {
     }
   };
 
-  // --- Time zone utilities ---
   const commonTimeZones = [
     "UTC",
     "Asia/Colombo",
@@ -92,7 +85,7 @@ export function WorkspaceWidgets() {
 
   const formatInTimeZone = (date, timeZone, options) => {
     return new Intl.DateTimeFormat("en-US", { timeZone, ...options }).format(
-      date
+      date,
     );
   };
 
@@ -119,7 +112,7 @@ export function WorkspaceWidgets() {
       Number(p.day),
       Number(p.hour),
       Number(p.minute),
-      Number(p.second)
+      Number(p.second),
     );
     const diffMs = asUTC - date.getTime();
     return Math.round(diffMs / 60000);
@@ -150,7 +143,6 @@ export function WorkspaceWidgets() {
     const a = ymdInZone(date, fromZone);
     const b = ymdInZone(date, toZone);
     if (a === b) return "Same day";
-    // Compare as dates
     const ad = new Date(`${a}T00:00:00Z`);
     const bd = new Date(`${b}T00:00:00Z`);
     const diffDays = Math.round((bd.getTime() - ad.getTime()) / 86400000);
@@ -161,7 +153,6 @@ export function WorkspaceWidgets() {
       : `${Math.abs(diffDays)} days behind`;
   };
 
-  // Currency conversion function
   const convertCurrency = async (amount, base, target) => {
     if (!amount || parseFloat(amount) <= 0) {
       setToAmount("");
@@ -176,7 +167,6 @@ export function WorkspaceWidgets() {
         parseFloat(amount),
         base,
         target,
-        session
       );
 
       if (result.success && result.data) {
@@ -188,8 +178,9 @@ export function WorkspaceWidgets() {
       }
     } catch (error) {
       console.error("Failed to convert currency:", error);
-      setCurrencyError("Unable to fetch currency conversion. Using fallback rate.");
-      // Fallback to a default conversion rate
+      setCurrencyError(
+        "Unable to fetch currency conversion. Using fallback rate.",
+      );
       try {
         const fallbackRate = base === "USD" && target === "LKR" ? 300.37 : 1;
         const convertedAmount = (parseFloat(amount) * fallbackRate).toFixed(2);
@@ -199,9 +190,9 @@ export function WorkspaceWidgets() {
           target,
           rate: fallbackRate,
           result: parseFloat(convertedAmount),
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
-      } catch (fallbackError) {
+      } catch {
         setToAmount("");
         setCurrencyData(null);
       }
@@ -221,7 +212,6 @@ export function WorkspaceWidgets() {
         } catch (error) {
           console.error("Failed to fetch news:", error);
           setNewsError("Failed to load latest news");
-          // Fallback to static data if fetch fails
           setNewsData([
             {
               title: "Unable to load latest news",
@@ -240,7 +230,7 @@ export function WorkspaceWidgets() {
         try {
           setWeatherLoading(true);
           setWeatherError(null);
-          const weather = await fetchWeather(session);
+          const weather = await fetchWeather();
           setWeatherData(weather);
         } catch (error) {
           console.error("Failed to fetch weather:", error);
@@ -257,17 +247,14 @@ export function WorkspaceWidgets() {
     loadData();
   }, []);
 
-  // Initial currency conversion
   useEffect(() => {
     convertCurrency(fromAmount, fromCurrency, toCurrency);
   }, []);
 
-  // Currency conversion when inputs change
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       convertCurrency(fromAmount, fromCurrency, toCurrency);
-    }, 500); // Debounce for 500ms
-
+    }, 500);
     return () => clearTimeout(timeoutId);
   }, [fromAmount, fromCurrency, toCurrency]);
 
@@ -291,8 +278,8 @@ export function WorkspaceWidgets() {
               {currencyLoading
                 ? "Loading..."
                 : currencyData
-                ? `${currencyData.rate.toFixed(2)} ${currencyData.target}`
-                : "300.37 Sri Lankan Rupee"}
+                  ? `${currencyData.rate.toFixed(2)} ${currencyData.target}`
+                  : "300.37 Sri Lankan Rupee"}
             </CardTitle>
             <CardDescription>
               {currencyData
@@ -374,9 +361,8 @@ export function WorkspaceWidgets() {
           </CardContent>
         </Card>
 
-        {/* Weather card (enhanced UX) */}
+        {/* Weather card */}
         <Card className="relative md:col-span-1 xl:col-span-3 h-[280px] overflow-hidden rounded-2xl border-0 shadow-none p-0 text-white">
-          {/* layered gradients for depth */}
           <div className="absolute inset-0 bg-gradient-to-b from-[#4e6b8a] via-[#6f86a6] to-[#a9abb0]" />
           <div className="absolute -top-10 -right-10 size-40 rounded-full bg-white/10 blur-2xl" />
           <div className="relative h-full w-full p-5 flex flex-col">
@@ -429,7 +415,7 @@ export function WorkspaceWidgets() {
           </div>
         </Card>
 
-        {/* Emergency contacts (replaces Visa Stay Calculator) */}
+        {/* Emergency contacts */}
         <Card className="rounded-2xl md:col-span-1 xl:col-span-3 h-[280px] shadow-none overflow-hidden">
           <CardHeader className="pb-0 pt-1 gap-0">
             <CardTitle className="text-lg">Emergency Contacts</CardTitle>
@@ -437,34 +423,13 @@ export function WorkspaceWidgets() {
           <CardContent className="w-full h-full -mt-1 flex flex-col gap-1 text-sm">
             <div className="grid grid-cols-1 gap-1.5 flex-1 min-h-0 overflow-y-auto pb-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
               {[
-                {
-                  name: "Police Emergency",
-                  number: "119",
-                },
-                {
-                  name: "Ambulance / Fire & Rescue",
-                  number: "110",
-                },
-                {
-                  name: "Suwa Seriya Ambulance",
-                  number: "1990",
-                },
-                {
-                  name: "Tourist Police",
-                  number: "1912",
-                },
-                {
-                  name: "Disaster Management",
-                  number: "117",
-                },
-                {
-                  name: "Accident Service (Colombo)",
-                  number: "011-2691111",
-                },
-                {
-                  name: "Colombo Fire/Ambulance",
-                  number: "011-2422222",
-                },
+                { name: "Police Emergency", number: "119" },
+                { name: "Ambulance / Fire & Rescue", number: "110" },
+                { name: "Suwa Seriya Ambulance", number: "1990" },
+                { name: "Tourist Police", number: "1912" },
+                { name: "Disaster Management", number: "117" },
+                { name: "Accident Service (Colombo)", number: "011-2691111" },
+                { name: "Colombo Fire/Ambulance", number: "011-2422222" },
               ].map((contact) => (
                 <div
                   key={contact.number}
@@ -488,8 +453,8 @@ export function WorkspaceWidgets() {
           </CardContent>
         </Card>
 
-        {/* Time Zone Converter (replaces SIM comparator) */}
-        <Card className="rounded-2xl  md:col-span-1 lg:col-span-2 xl:col-span-4 h-[280px] shadow-none overflow-hidden">
+        {/* Time Zone Converter */}
+        <Card className="rounded-2xl md:col-span-1 lg:col-span-2 xl:col-span-4 h-[280px] shadow-none overflow-hidden">
           <CardContent className="space-y-3 h-full flex flex-col">
             <CardTitle className="text-xl font-semibold text-foreground">
               Time Zone Converter
@@ -618,7 +583,7 @@ export function WorkspaceWidgets() {
           </CardContent>
         </Card>
 
-        {/* Simple card to replace calendar */}
+        {/* Quick Info */}
         <Card className="rounded-2xl md:col-span-1 lg:col-span-1 shadow-none xl:col-span-3 h-[280px] overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Quick Info</CardTitle>
@@ -651,6 +616,7 @@ export function WorkspaceWidgets() {
           </CardContent>
         </Card>
 
+        {/* News */}
         <Card className="rounded-2xl shadow-none md:col-span-2 lg:col-span-3 xl:col-span-5 h-[280px] overflow-hidden">
           <CardContent className="h-full flex flex-col">
             {newsLoading && (

@@ -15,7 +15,6 @@ import {
   Search,
   MapPin,
   Calendar,
-  Clock,
   Loader2,
   XCircle,
   Heart,
@@ -34,8 +33,6 @@ import {
   SheetClose,
 } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getAuthHeaders } from "@/lib/api";
-import { useSession } from "next-auth/react";
 
 const API_BASE_URL = "http://localhost:8080";
 
@@ -50,22 +47,17 @@ export default function EventsListing() {
   const [dateFilter, setDateFilter] = useState("all");
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [savedIds, setSavedIds] = useState([]);
-  const { data: session, status } = useSession();
   const hasFetchedRef = useRef(false);
 
-  // Load saved meetups only once on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem("savedMeetups");
-      if (saved) {
-        setSavedIds(JSON.parse(saved));
-      }
+      if (saved) setSavedIds(JSON.parse(saved));
     } catch (err) {
       console.error("Error loading saved meetups:", err);
     }
   }, []);
 
-  // Save to localStorage whenever savedIds changes
   useEffect(() => {
     try {
       localStorage.setItem("savedMeetups", JSON.stringify(savedIds));
@@ -74,31 +66,16 @@ export default function EventsListing() {
     }
   }, [savedIds]);
 
-  // Fetch meetups only once when session is ready
   useEffect(() => {
     const fetchMeetups = async () => {
-      // Prevent multiple fetches
       if (hasFetchedRef.current) return;
-
-      // Wait for session to be loaded
-      if (status === "loading") return;
-
-      // Check if we have a valid session
-      if (!session?.access_token) {
-        setLoading(false);
-        setError("Please log in to view meetups");
-        return;
-      }
-
       hasFetchedRef.current = true;
 
       try {
         setLoading(true);
         setError("");
 
-        const response = await fetch(`${API_BASE_URL}/api/meetups`, {
-          headers: getAuthHeaders(session),
-        });
+        const response = await fetch(`${API_BASE_URL}/api/meetups`);
         const data = await response.json();
 
         if (response.ok) {
@@ -119,24 +96,21 @@ export default function EventsListing() {
     };
 
     fetchMeetups();
-  }, [session?.access_token, status]);
+  }, []);
 
-  // Manual refresh function
   const handleRefresh = useCallback(() => {
     hasFetchedRef.current = false;
     setLoading(true);
     setError("");
-
-    // Trigger re-fetch by updating a counter or re-running the effect
     window.location.reload();
   }, []);
 
   const cities = useMemo(
     () =>
       Array.from(
-        new Set(events.map((event) => event.venueName).filter(Boolean))
+        new Set(events.map((event) => event.venueName).filter(Boolean)),
       ),
-    [events]
+    [events],
   );
 
   const formatDateTime = useCallback((date, time) => {
@@ -155,7 +129,7 @@ export default function EventsListing() {
         }),
       };
     } catch {
-      return { date: date, time: time };
+      return { date, time };
     }
   }, []);
 
@@ -173,7 +147,6 @@ export default function EventsListing() {
       const cityMatch =
         selectedCity === "all" || event.venueName === selectedCity;
       const categoryMatch = selectedCategory === "all";
-
       const searchMatch =
         debouncedSearch === "" ||
         event.eventName.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
@@ -189,11 +162,8 @@ export default function EventsListing() {
       const nextMonth = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
       let dateMatch = true;
-      if (dateFilter === "week") {
-        dateMatch = eventDate <= nextWeek;
-      } else if (dateFilter === "month") {
-        dateMatch = eventDate <= nextMonth;
-      }
+      if (dateFilter === "week") dateMatch = eventDate <= nextWeek;
+      else if (dateFilter === "month") dateMatch = eventDate <= nextMonth;
 
       return cityMatch && categoryMatch && searchMatch && dateMatch;
     });
@@ -215,7 +185,7 @@ export default function EventsListing() {
     setSavedIds((prev) =>
       prev.includes(eventId)
         ? prev.filter((id) => id !== eventId)
-        : [...prev, eventId]
+        : [...prev, eventId],
     );
   }, []);
 
@@ -306,11 +276,7 @@ export default function EventsListing() {
             </SheetTrigger>
             <SheetContent
               side="right"
-              className={`${
-                isMobile
-                  ? "max-w-[95%] max-h-[80vh] p-4 rounded-xl"
-                  : "max-w-3xl p-6 rounded-xl"
-              } overflow-hidden flex flex-col [&>button]:hidden`}
+              className={`${isMobile ? "max-w-[95%] max-h-[80vh] p-4 rounded-xl" : "max-w-3xl p-6 rounded-xl"} overflow-hidden flex flex-col [&>button]:hidden`}
             >
               <div className="absolute right-3 top-3 z-50">
                 <Button
@@ -390,7 +356,7 @@ export default function EventsListing() {
           {filteredEvents.map((event) => {
             const { date, time } = formatDateTime(
               event.eventStartDate,
-              event.eventStartTime
+              event.eventStartTime,
             );
             return (
               <Link
@@ -413,11 +379,7 @@ export default function EventsListing() {
                       className="absolute top-3 right-3 inline-flex items-center justify-center h-9 w-9 rounded-full bg-background/90 text-foreground shadow-sm"
                     >
                       <Heart
-                        className={`h-5 w-5 ${
-                          savedIds.includes(event.eventId)
-                            ? "fill-red-500 text-red-500"
-                            : ""
-                        }`}
+                        className={`h-5 w-5 ${savedIds.includes(event.eventId) ? "fill-red-500 text-red-500" : ""}`}
                       />
                     </button>
                   </div>
