@@ -46,8 +46,13 @@ public isolated function createPlace(http:Request req) returns PlaceCreationResu
     }
 
     string[] requiredFields = [
-        "name", "location", "googleMapsUrl", "price", "currency",
-        "billing", "capacity"
+        "name",
+        "location",
+        "googleMapsUrl",
+        "price",
+        "currency",
+        "billing",
+        "capacity"
     ];
 
     foreach string reqField in requiredFields {
@@ -98,13 +103,8 @@ public isolated function getAllPlaces() returns PlaceListResponse|error {
     if dbResult is sql:Error {
         return {success: false, message: "Failed to fetch places: " + dbResult.message()};
     }
-
-    Place[] places = [];
-    foreach PlaceRecord placeRecord in dbResult {
-        Place place = mapPlaceRecordToPlace(placeRecord);
-        places.push(place);
-    }
-
+    Place[] places = from PlaceRecord r in dbResult
+        select mapPlaceRecordToPlace(r);
     return {success: true, message: "Places fetched successfully", data: places};
 }
 
@@ -123,12 +123,9 @@ public isolated function deletePlace(string placeId) returns PlaceCreationResult
     if dbResult is sql:Error {
         return {success: false, message: "Failed to delete place: " + dbResult.message()};
     }
-
-    sql:ExecutionResult result = dbResult;
-    if result.affectedRowCount == 0 {
+    if dbResult.affectedRowCount == 0 {
         return {success: false, message: "Place not found"};
     }
-
     return {success: true, message: "Place deleted successfully"};
 }
 
@@ -163,52 +160,3 @@ isolated function mapPlaceRecordToPlace(PlaceRecord placeRecord) returns Place {
     };
 }
 
-isolated function insertPlace(PlaceInsert placeData) returns sql:ExecutionResult|sql:Error {
-    sql:ParameterizedQuery insertQuery = `
-        INSERT INTO places (
-            place_id, name, location, google_maps_url, price, currency, 
-            billing, capacity, workspace_types, amenities, phone, 
-            email, website, photo_urls, created_at
-        ) VALUES (
-            ${placeData.placeId}, ${placeData.name}, ${placeData.location}, 
-            ${placeData.googleMapsUrl}, ${placeData.price}, ${placeData.currency}, 
-            ${placeData.billing}, ${placeData.capacity}, ${placeData.workspaceTypes}, 
-            ${placeData.amenities}, ${placeData.phone}, ${placeData.email}, 
-            ${placeData.website}, ${placeData.photoUrls}, ${placeData.createdAt}
-        )
-    `;
-
-    return utils:dbClient->execute(insertQuery);
-}
-
-isolated function getAllPlacesFromDb() returns PlaceRecord[]|sql:Error {
-    sql:ParameterizedQuery selectQuery = `
-        SELECT place_id, name, location, google_maps_url, price, currency, 
-               billing, capacity, workspace_types, amenities, phone, 
-               email, website, photo_urls, created_at
-        FROM places 
-        ORDER BY created_at DESC
-    `;
-
-    stream<PlaceRecord, sql:Error?> placeStream = utils:dbClient->query(selectQuery, PlaceRecord);
-    PlaceRecord[] places = check from var place in placeStream
-        select place;
-    return places;
-}
-
-isolated function getPlaceByIdFromDb(string placeId) returns PlaceRecord|sql:Error {
-    sql:ParameterizedQuery selectQuery = `
-        SELECT place_id, name, location, google_maps_url, price, currency, 
-               billing, capacity, workspace_types, amenities, phone, 
-               email, website, photo_urls, created_at
-        FROM places 
-        WHERE place_id = ${placeId}
-    `;
-
-    return utils:dbClient->queryRow(selectQuery);
-}
-
-isolated function deletePlaceFromDb(string placeId) returns sql:ExecutionResult|sql:Error {
-    sql:ParameterizedQuery deleteQuery = `DELETE FROM places WHERE place_id = ${placeId}`;
-    return utils:dbClient->execute(deleteQuery);
-}

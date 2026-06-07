@@ -4,14 +4,11 @@ import { useState, useEffect } from "react";
 import {
   Search,
   MapPin,
-  Users,
-  X,
-  Heart,
   Star,
   SlidersHorizontal,
-  Plus,
   Loader2,
   XCircle,
+  X,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
@@ -29,26 +26,13 @@ import {
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
-import Image from "next/image";
 import Link from "next/link";
-import { getAuthHeaders } from "@/lib/api"
-import { useSession } from "next-auth/react"
-
-// Add custom styles for line-clamp
-const lineClampStyle = {
-  display: '-webkit-box',
-  WebkitLineClamp: 1,
-  WebkitBoxOrient: 'vertical',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis'
-};
 
 const API_BASE_URL = "http://localhost:8080";
 
@@ -88,25 +72,17 @@ export default function CoworkingPlacesPage() {
   const [savedSpaces, setSavedSpaces] = useState([]);
   const [sortBy, setSortBy] = useState("featured");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const { data: session } = useSession()
 
-  // Fetch places from API
   const fetchPlaces = async () => {
     try {
       setLoading(true);
       setError("");
 
-      console.log("Fetching places from:", `${API_BASE_URL}/api/places`);
-      const response = await fetch(`${API_BASE_URL}/api/places`, {
-        headers: getAuthHeaders(session)
-      });
+      const response = await fetch(`${API_BASE_URL}/api/places`);
       const data = await response.json();
-
-      console.log("API Response:", data);
 
       if (response.ok) {
         if (data.success && data.data) {
-          console.log("Setting places:", data.data);
           setPlaces(data.data);
         } else {
           setError(data.message || "No places data received");
@@ -122,28 +98,26 @@ export default function CoworkingPlacesPage() {
     }
   };
 
-  // Load places on component mount
   useEffect(() => {
     fetchPlaces();
   }, []);
 
-  // Load and persist saved places
   useEffect(() => {
     try {
       const saved = localStorage.getItem("savedPlaces");
       if (saved) setSavedSpaces(JSON.parse(saved));
-    } catch { }
+    } catch {}
   }, []);
 
   useEffect(() => {
     try {
       localStorage.setItem("savedPlaces", JSON.stringify(savedSpaces));
-    } catch { }
+    } catch {}
   }, [savedSpaces]);
 
   const toggleTypeFilter = (type) => {
     setSelectedTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type],
     );
   };
 
@@ -151,7 +125,7 @@ export default function CoworkingPlacesPage() {
     setSelectedAmenities((prev) =>
       prev.includes(amenity)
         ? prev.filter((a) => a !== amenity)
-        : [...prev, amenity]
+        : [...prev, amenity],
     );
   };
 
@@ -165,12 +139,11 @@ export default function CoworkingPlacesPage() {
     setSavedSpaces((prev) =>
       prev.includes(placeId)
         ? prev.filter((id) => id !== placeId)
-        : [...prev, placeId]
+        : [...prev, placeId],
     );
   };
 
   const getCurrentPrice = (place) => {
-    // Use the base price from the API
     return place.pricing.price;
   };
 
@@ -179,10 +152,12 @@ export default function CoworkingPlacesPage() {
     const currency = place.pricing.currency;
     const billing = place.pricing.billing;
 
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency,
-    }).format(price) + ` per ${billing}`;
+    return (
+      new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currency,
+      }).format(price) + ` per ${billing}`
+    );
   };
 
   const filteredPlaces = places.filter((place) => {
@@ -192,7 +167,7 @@ export default function CoworkingPlacesPage() {
 
     const matchesType =
       selectedTypes.length === 0 ||
-      selectedTypes.some(type => place.workspaceTypes.includes(type));
+      selectedTypes.some((type) => place.workspaceTypes.includes(type));
 
     const matchesAmenities =
       selectedAmenities.length === 0 ||
@@ -200,10 +175,7 @@ export default function CoworkingPlacesPage() {
 
     const currentPrice = getCurrentPrice(place);
     const matchesBudget =
-      currentPrice >= budgetRange[0] &&
-      currentPrice <= budgetRange[1];
-
-    console.log(`Place: ${place.name}, Price: ${currentPrice}, Budget Range: ${budgetRange[0]}-${budgetRange[1]}, Matches Budget: ${matchesBudget}`);
+      currentPrice >= budgetRange[0] && currentPrice <= budgetRange[1];
 
     return matchesSearch && matchesType && matchesAmenities && matchesBudget;
   });
@@ -217,8 +189,13 @@ export default function CoworkingPlacesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Find the Perfect Desk, Anywhere You Go</h1>
-          <p className="text-muted-foreground mt-1">Compare and choose co-working spaces that make working away from home effortless.</p>
+          <h1 className="text-2xl font-semibold text-foreground">
+            Find the Perfect Desk, Anywhere You Go
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Compare and choose co-working spaces that make working away from
+            home effortless.
+          </p>
         </div>
         <div className="flex items-center justify-center min-h-72">
           <div className="text-center">
@@ -234,14 +211,17 @@ export default function CoworkingPlacesPage() {
     return (
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Find the Perfect Desk, Anywhere You Go</h1>
-          <p className="text-muted-foreground mt-1">Compare and choose co-working spaces that make working away from home effortless.</p>
+          <h1 className="text-2xl font-semibold text-foreground">
+            Find the Perfect Desk, Anywhere You Go
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Compare and choose co-working spaces that make working away from
+            home effortless.
+          </p>
         </div>
         <Alert className="mb-6">
           <XCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription>
-            {error}
-          </AlertDescription>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
         <Button onClick={fetchPlaces} variant="outline">
           Try Again
@@ -252,27 +232,26 @@ export default function CoworkingPlacesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-foreground">
             Find the Perfect Desk, Anywhere You Go
           </h1>
-          <p className="text-muted-foreground mt-1">Compare and choose co-working spaces that make working away from home effortless.</p>
+          <p className="text-muted-foreground mt-1">
+            Compare and choose co-working spaces that make working away from
+            home effortless.
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-sm text-muted-foreground">
             {filteredPlaces.length} spaces available
           </div>
           <Link href="/workspace/places/create">
-            <Button>
-              Add New Space
-            </Button>
+            <Button>Add New Space</Button>
           </Link>
         </div>
       </div>
 
-      {/* Search and Filters Bar */}
       <div className="flex items-center space-x-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -312,13 +291,7 @@ export default function CoworkingPlacesPage() {
 
           <SheetContent
             side="right"
-            className={`
-              ${isMobile
-                ? "max-w-[95%] max-h-[80vh] p-4 rounded-xl"
-                : "max-w-3xl p-6 rounded-xl"
-              }
-              overflow-hidden flex flex-col [&>button]:hidden
-            `}
+            className={`${isMobile ? "max-w-[95%] max-h-[80vh] p-4 rounded-xl" : "max-w-3xl p-6 rounded-xl"} overflow-hidden flex flex-col [&>button]:hidden`}
           >
             <div className="absolute right-3 top-3 z-50">
               <Button
@@ -336,27 +309,23 @@ export default function CoworkingPlacesPage() {
               <SheetTitle className="text-2xl">Filter Workspaces</SheetTitle>
             </SheetHeader>
             <div className="px-4 pt-2 pb-4 space-y-6">
-              {/* Budget Filter */}
               <div className="space-y-4">
                 <label className="block text-md font-medium">
                   Budget Range: ${budgetRange[0]} - ${budgetRange[1]} per{" "}
                   {selectedDuration.replace("ly", "")}
                 </label>
-                <div>
-                  <Slider
-                    value={budgetRange}
-                    onValueChange={setBudgetRange}
-                    max={3000000}
-                    min={0}
-                    step={10000}
-                    className="w-full"
-                  />
-                </div>
+                <Slider
+                  value={budgetRange}
+                  onValueChange={setBudgetRange}
+                  max={3000000}
+                  min={0}
+                  step={10000}
+                  className="w-full"
+                />
               </div>
 
               <Separator />
 
-              {/* Workspace Type */}
               <div className="space-y-4">
                 <label className="block text-md font-medium">
                   Workspace Type
@@ -380,11 +349,8 @@ export default function CoworkingPlacesPage() {
 
               <Separator />
 
-              {/* Amenities */}
               <div className="space-y-4">
-                <label className="block text-md font-medium">
-                  Amenities
-                </label>
+                <label className="block text-md font-medium">Amenities</label>
                 <div className="grid grid-cols-2 gap-2">
                   {amenityFilters.map((amenity) => (
                     <Button
@@ -404,7 +370,6 @@ export default function CoworkingPlacesPage() {
                 </div>
               </div>
 
-              {/* Clear Filters */}
               {activeFiltersCount > 0 && (
                 <div className="pt-4 border-t">
                   <Button
@@ -434,17 +399,13 @@ export default function CoworkingPlacesPage() {
         </Select>
       </div>
 
-      {/* Active Filters Display */}
       {activeFiltersCount > 0 && (
         <div className="flex items-center space-x-2 flex-wrap">
           <span className="text-sm text-muted-foreground">Active filters:</span>
           {selectedTypes.map((type) => (
             <Badge key={type} variant="secondary">
               {type}
-              <button
-                onClick={() => toggleTypeFilter(type)}
-                className="ml-1"
-              >
+              <button onClick={() => toggleTypeFilter(type)} className="ml-1">
                 <X className="h-3 w-3" />
               </button>
             </Badge>
@@ -474,16 +435,12 @@ export default function CoworkingPlacesPage() {
         </div>
       )}
 
-      {/* Co-working Spaces Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredPlaces.map((place) => (
           <div
             key={place.placeId}
             className="cursor-pointer group"
-            onClick={() => {
-              // Navigate to place detail page or handle click
-              console.log('Navigate to place:', place.placeId);
-            }}
+            onClick={() => console.log("Navigate to place:", place.placeId)}
           >
             <div className="relative rounded-lg overflow-hidden">
               {place.photoUrls && place.photoUrls.length > 0 ? (
@@ -497,7 +454,6 @@ export default function CoworkingPlacesPage() {
                   <MapPin className="h-8 w-8 text-muted-foreground" />
                 </div>
               )}
-
             </div>
 
             <div className="pt-3 space-y-1">
@@ -524,7 +480,6 @@ export default function CoworkingPlacesPage() {
         ))}
       </div>
 
-      {/* Empty State */}
       {filteredPlaces.length === 0 && (
         <div className="text-center py-12">
           <div className="text-muted-foreground mb-4">

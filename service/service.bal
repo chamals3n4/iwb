@@ -13,27 +13,26 @@ import ballerina/log;
 
 configurable int port = 8080;
 
-// cors and jwt validation
 @http:ServiceConfig {
     cors: {
         allowOrigins: ["http://localhost:3000"],
         allowCredentials: false,
         allowHeaders: ["CORELATION_ID", "Content-Type", "Authorization"],
         allowMethods: ["GET", "POST", "PUT", "DELETE"]
-    },
-    auth: [
-        {
-            jwtValidatorConfig: {
-                issuer: "https://api.asgardeo.io/t/s3n4/oauth2/token",
-                audience: ["0fnjPx9nXjkZunwwJ4NKdVwTK9wa"],
-                signatureConfig: {
-                    jwksConfig: {
-                        url: "https://api.asgardeo.io/t/s3n4/oauth2/jwks"
-                    }
-                }
-            }
-        }
-    ]
+    }
+    // auth: [
+    //     {
+    //         jwtValidatorConfig: {
+    //             issuer: "https://api.asgardeo.io/t/s3n4/oauth2/token",
+    //             audience: ["9aZBrIolQXX1TKm1ZH8M1gOPQKQa"],
+    //             signatureConfig: {
+    //                 jwksConfig: {
+    //                     url: "https://api.asgardeo.io/t/s3n4/oauth2/jwks"
+    //                 }
+    //             }
+    //         }
+    //     }
+    // ]
 }
 service / on new http:Listener(port) {
 

@@ -23,7 +23,7 @@ public isolated function createMeetup(http:Request req) returns EventCreationRes
         string partName = contentDisposition.name;
 
         if partName == "image" {
-            utils:ImageUploadResult|error uploadResult = utils:uploadImageToS3(req);
+            utils:ImageUploadResult|error uploadResult = utils:uploadImageToR2(req);
             if uploadResult is utils:ImageUploadResult && uploadResult.success {
                 utils:ImageData? imageData = uploadResult?.data;
                 if imageData is utils:ImageData {
@@ -71,7 +71,7 @@ public isolated function createMeetup(http:Request req) returns EventCreationRes
         return {success: false, message: "Event capacity is required for limited capacity events"};
     }
 
-    utils:MeetupInsert meetupInsert = {
+    MeetupInsert meetupInsert = {
         eventId: uuid:createType1AsString(),
         eventName: formData.get("eventName"),
         eventDescription: formData.get("eventDescription"),
@@ -90,7 +90,7 @@ public isolated function createMeetup(http:Request req) returns EventCreationRes
         createdAt: time:utcNow().toString()
     };
 
-    sql:ExecutionResult|sql:Error dbResult = utils:insertMeetup(meetupInsert);
+    sql:ExecutionResult|sql:Error dbResult = insertMeetup(meetupInsert);
     if dbResult is sql:Error {
         return {success: false, message: "Failed to save meetup to database: " + dbResult.message()};
     }
@@ -99,13 +99,13 @@ public isolated function createMeetup(http:Request req) returns EventCreationRes
 }
 
 public isolated function getAllMeetups() returns MeetupListResponse|error {
-    utils:MeetupRecord[]|sql:Error dbResult = utils:getAllMeetups();
+    MeetupRecord[]|sql:Error dbResult = dbGetAllMeetups();
     if dbResult is sql:Error {
         return {success: false, message: "Failed to fetch meetups: " + dbResult.message()};
     }
 
     EventData[] eventDataList = [];
-    foreach utils:MeetupRecord meetup in dbResult {
+    foreach MeetupRecord meetup in dbResult {
         EventData eventData = {
             eventId: meetup.event_id,
             eventName: meetup.event_name,
@@ -131,7 +131,7 @@ public isolated function getAllMeetups() returns MeetupListResponse|error {
 }
 
 public isolated function getMeetupById(string eventId) returns MeetupResponse|error {
-    utils:MeetupRecord|sql:Error dbResult = utils:getMeetupById(eventId);
+    MeetupRecord|sql:Error dbResult = dbGetMeetupById(eventId);
     if dbResult is sql:Error {
         return {success: false, message: "Meetup not found"};
     }
@@ -159,7 +159,7 @@ public isolated function getMeetupById(string eventId) returns MeetupResponse|er
 }
 
 public function updateMeetup(string eventId, EventUpdateRequest updateRequest) returns EventCreationResult|error {
-    utils:MeetupUpdate meetupUpdate = {
+    MeetupUpdate meetupUpdate = {
         eventName: updateRequest.eventName,
         eventDescription: updateRequest.eventDescription,
         eventStartDate: updateRequest.eventStartDate,
@@ -176,7 +176,7 @@ public function updateMeetup(string eventId, EventUpdateRequest updateRequest) r
         imageUrl: ()
     };
 
-    sql:ExecutionResult|sql:Error dbResult = utils:updateMeetup(eventId, meetupUpdate);
+    sql:ExecutionResult|sql:Error dbResult = dbUpdateMeetup(eventId, meetupUpdate);
     if dbResult is sql:Error {
         return {success: false, message: "Failed to update meetup: " + dbResult.message()};
     }
@@ -190,7 +190,7 @@ public function updateMeetup(string eventId, EventUpdateRequest updateRequest) r
 }
 
 public isolated function deleteMeetup(string eventId) returns EventCreationResult|error {
-    sql:ExecutionResult|sql:Error dbResult = utils:deleteMeetup(eventId);
+    sql:ExecutionResult|sql:Error dbResult = dbDeleteMeetup(eventId);
     if dbResult is sql:Error {
         return {success: false, message: "Failed to delete meetup: " + dbResult.message()};
     }

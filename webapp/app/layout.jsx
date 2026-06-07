@@ -1,21 +1,15 @@
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
-import { Geist, Geist_Mono, Playfair_Display } from "next/font/google";
+import { Figtree } from "next/font/google";
 import Providers from "./providers";
+import { AsgardeoProvider } from "@asgardeo/nextjs/server";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const figtree = Figtree({
+  variable: "--font-figtree",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const playfairDisplay = Playfair_Display({
-  variable: "--font-playfair-display",
-  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
+  style: ["normal", "italic"],
+  display: "swap",
 });
 
 export const metadata = {
@@ -25,10 +19,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${playfairDisplay.variable} antialiased`}
-      >
-        <Providers>{children}</Providers>
+      <body className={`${figtree.variable} font-sans antialiased`}>
+        <AsgardeoProvider>
+          <Providers>{children}</Providers>
+        </AsgardeoProvider>
       </body>
     </html>
   );

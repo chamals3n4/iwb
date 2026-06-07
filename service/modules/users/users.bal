@@ -1,13 +1,10 @@
-import 'service.utils;
-
-import ballerina/log;
 import ballerina/sql;
 import ballerina/time;
 
 public isolated function createOrUpdateUser(UserCreateRequest userRequest) returns UserResponse|error {
     string currentTime = time:utcNow().toString();
 
-    UserRecord|sql:Error existingUser = utils:getUserById(userRequest.userId);
+    UserRecord|sql:Error existingUser = dbGetUserById(userRequest.userId);
 
     if existingUser is UserRecord {
         // Preserve existing values if incoming fields are missing or empty
@@ -33,12 +30,12 @@ public isolated function createOrUpdateUser(UserCreateRequest userRequest) retur
             updatedAt: currentTime
         };
 
-        sql:ExecutionResult|sql:Error updateResult = utils:updateUser(userRequest.userId, userUpdate);
+        sql:ExecutionResult|sql:Error updateResult = dbUpdateUser(userRequest.userId, userUpdate);
         if updateResult is sql:Error {
             return {success: false, message: "Failed to update user: " + updateResult.message()};
         }
 
-        UserRecord|sql:Error updatedUser = utils:getUserById(userRequest.userId);
+        UserRecord|sql:Error updatedUser = dbGetUserById(userRequest.userId);
         if updatedUser is sql:Error {
             return {success: false, message: "Failed to fetch updated user"};
         }
@@ -62,12 +59,12 @@ public isolated function createOrUpdateUser(UserCreateRequest userRequest) retur
             updatedAt: currentTime
         };
 
-        sql:ExecutionResult|sql:Error insertResult = utils:insertUser(userInsert);
+        sql:ExecutionResult|sql:Error insertResult = dbInsertUser(userInsert);
         if insertResult is sql:Error {
             return {success: false, message: "Failed to create user: " + insertResult.message()};
         }
 
-        UserRecord|sql:Error newUser = utils:getUserById(userRequest.userId);
+        UserRecord|sql:Error newUser = dbGetUserById(userRequest.userId);
         if newUser is sql:Error {
             return {success: false, message: "Failed to fetch created user"};
         }
@@ -80,16 +77,10 @@ public isolated function createOrUpdateUser(UserCreateRequest userRequest) retur
 public isolated function updateUserProfile(string userId, UserUpdateRequest updateRequest) returns UserResponse|error {
     string currentTime = time:utcNow().toString();
 
-    log:printInfo("🔍 updateUserProfile called with userId: " + userId);
-    log:printInfo("📝 Update request data: " + updateRequest.toJsonString());
-
-    UserRecord|sql:Error existingUser = utils:getUserById(userId);
+    UserRecord|sql:Error existingUser = dbGetUserById(userId);
     if existingUser is sql:Error {
-        log:printError("❌ User lookup failed for userId: " + userId + ", Error: " + existingUser.message());
         return {success: false, message: "User not found"};
     }
-
-    log:printInfo("✅ User found: " + existingUser.user_id);
 
     UserUpdate userUpdate = {
         firstName: updateRequest?.firstName ?: existingUser.first_name,
@@ -105,12 +96,12 @@ public isolated function updateUserProfile(string userId, UserUpdateRequest upda
         updatedAt: currentTime
     };
 
-    sql:ExecutionResult|sql:Error updateResult = utils:updateUser(userId, userUpdate);
+    sql:ExecutionResult|sql:Error updateResult = dbUpdateUser(userId, userUpdate);
     if updateResult is sql:Error {
         return {success: false, message: "Failed to update user profile: " + updateResult.message()};
     }
 
-    UserRecord|sql:Error updatedUser = utils:getUserById(userId);
+    UserRecord|sql:Error updatedUser = dbGetUserById(userId);
     if updatedUser is sql:Error {
         return {success: false, message: "Failed to fetch updated user"};
     }
@@ -120,22 +111,17 @@ public isolated function updateUserProfile(string userId, UserUpdateRequest upda
 }
 
 public isolated function getAllUsers() returns UserListResponse|error {
-    UserRecord[]|sql:Error dbResult = utils:getAllUsers();
+    UserRecord[]|sql:Error dbResult = dbGetAllUsers();
     if dbResult is sql:Error {
         return {success: false, message: "Failed to fetch users: " + dbResult.message()};
     }
-
-    User[] users = [];
-    foreach UserRecord userRecord in dbResult {
-        User userData = mapUserRecordToUser(userRecord);
-        users.push(userData);
-    }
-
+    User[] users = from UserRecord r in dbResult
+        select mapUserRecordToUser(r);
     return {success: true, message: "Users fetched successfully", data: users};
 }
 
 public isolated function getUserById(string userId) returns UserResponse|error {
-    UserRecord|sql:Error dbResult = utils:getUserById(userId);
+    UserRecord|sql:Error dbResult = dbGetUserById(userId);
     if dbResult is sql:Error {
         return {success: false, message: "User not found"};
     }

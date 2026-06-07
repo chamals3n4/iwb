@@ -8,19 +8,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Upload, Loader2, XCircle, Calendar, MapPin, DollarSign, Users, CheckCircle, Clock } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  ArrowLeft,
+  Upload,
+  Loader2,
+  XCircle,
+  Calendar,
+  MapPin,
+  DollarSign,
+  Users,
+  CheckCircle,
+  Clock,
+} from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
-import { getAuthHeaders } from "@/lib/api";
 
 const API_BASE_URL = "http://localhost:8080";
 
 export default function CreateMeetupPage() {
   const router = useRouter();
-  const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -47,30 +59,25 @@ export default function CreateMeetupPage() {
   const [endDate, setEndDate] = useState();
 
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleStartDateChange = (date) => {
     setStartDate(date);
-    if (date) {
-      setFormData(prev => ({
+    if (date)
+      setFormData((prev) => ({
         ...prev,
-        eventStartDate: format(date, 'yyyy-MM-dd')
+        eventStartDate: format(date, "yyyy-MM-dd"),
       }));
-    }
   };
 
   const handleEndDateChange = (date) => {
     setEndDate(date);
-    if (date) {
-      setFormData(prev => ({
+    if (date)
+      setFormData((prev) => ({
         ...prev,
-        eventEndDate: format(date, 'yyyy-MM-dd')
+        eventEndDate: format(date, "yyyy-MM-dd"),
       }));
-    }
   };
 
   const handleImageChange = (e) => {
@@ -78,9 +85,7 @@ export default function CreateMeetupPage() {
     if (file) {
       setImageFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
+      reader.onloadend = () => setImagePreview(reader.result);
       reader.readAsDataURL(file);
     }
   };
@@ -98,22 +103,22 @@ export default function CreateMeetupPage() {
 
     try {
       const formDataToSend = new FormData();
-
-      Object.keys(formData).forEach(key => {
-        if (key === "isPaidEvent" || key === "hasLimitedCapacity" || key === "requireApproval") {
+      Object.keys(formData).forEach((key) => {
+        if (
+          key === "isPaidEvent" ||
+          key === "hasLimitedCapacity" ||
+          key === "requireApproval"
+        ) {
           formDataToSend.append(key, formData[key].toString());
         } else {
           formDataToSend.append(key, formData[key]);
         }
       });
 
-      if (imageFile) {
-        formDataToSend.append("image", imageFile);
-      }
+      if (imageFile) formDataToSend.append("image", imageFile);
 
       const response = await fetch(`${API_BASE_URL}/event/create`, {
         method: "POST",
-        headers: getAuthHeaders(session),
         body: formDataToSend,
       });
 
@@ -121,9 +126,7 @@ export default function CreateMeetupPage() {
 
       if (response.ok && result.success) {
         setSuccess("Meetup created successfully!");
-        setTimeout(() => {
-          router.push("/workspace/meetups");
-        }, 2000);
+        setTimeout(() => router.push("/workspace/meetups"), 2000);
       } else {
         setError(result.message || "Failed to create meetup");
       }
@@ -138,7 +141,6 @@ export default function CreateMeetupPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-4xl mx-auto px-4 py-8">
-        {/* Header */}
         <div className="mb-12">
           <Link
             href="/workspace/meetups"
@@ -148,37 +150,51 @@ export default function CreateMeetupPage() {
             Back to Meetups
           </Link>
           <div className="space-y-2">
-            <h1 className="text-4xl font-bold tracking-tight">Create a New Meetup</h1>
-            <p className="text-lg text-muted-foreground">Share your event with the community</p>
+            <h1 className="text-4xl font-bold tracking-tight">
+              Create a New Meetup
+            </h1>
+            <p className="text-lg text-muted-foreground">
+              Share your event with the community
+            </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-12">
-          {/* Basic Information */}
           <section className="space-y-6">
             <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight">Basic Information</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Basic Information
+              </h2>
               <p className="text-muted-foreground">Tell us about your event</p>
             </div>
-
             <div className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="eventName" className="text-sm font-medium">Event Name *</Label>
+                <Label htmlFor="eventName" className="text-sm font-medium">
+                  Event Name *
+                </Label>
                 <Input
                   id="eventName"
                   value={formData.eventName}
-                  onChange={(e) => handleInputChange("eventName", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("eventName", e.target.value)
+                  }
                   placeholder="Enter event name"
                   required
                 />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="eventDescription" className="text-sm font-medium">Description *</Label>
+                <Label
+                  htmlFor="eventDescription"
+                  className="text-sm font-medium"
+                >
+                  Description *
+                </Label>
                 <Textarea
                   id="eventDescription"
                   value={formData.eventDescription}
-                  onChange={(e) => handleInputChange("eventDescription", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("eventDescription", e.target.value)
+                  }
                   placeholder="Describe your event"
                   rows={4}
                   required
@@ -187,13 +203,15 @@ export default function CreateMeetupPage() {
             </div>
           </section>
 
-          {/* Event Image */}
           <section className="space-y-6">
             <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight">Event Image</h2>
-              <p className="text-muted-foreground">Add a cover image for your event</p>
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Event Image
+              </h2>
+              <p className="text-muted-foreground">
+                Add a cover image for your event
+              </p>
             </div>
-
             <div className="max-w-md">
               {imagePreview ? (
                 <div className="relative group">
@@ -232,16 +250,16 @@ export default function CreateMeetupPage() {
             </div>
           </section>
 
-          {/* Date and Time */}
           <section className="space-y-6">
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
                 <Calendar className="h-6 w-6" />
                 Date and Time
               </h2>
-              <p className="text-muted-foreground">When will your event take place?</p>
+              <p className="text-muted-foreground">
+                When will your event take place?
+              </p>
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Start Date *</Label>
@@ -266,14 +284,18 @@ export default function CreateMeetupPage() {
                 </Popover>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="eventStartTime" className="text-sm font-medium">Start Time *</Label>
+                <Label htmlFor="eventStartTime" className="text-sm font-medium">
+                  Start Time *
+                </Label>
                 <div className="relative">
                   <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="eventStartTime"
                     type="time"
                     value={formData.eventStartTime}
-                    onChange={(e) => handleInputChange("eventStartTime", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("eventStartTime", e.target.value)
+                    }
                     className="pl-10"
                     required
                   />
@@ -302,14 +324,18 @@ export default function CreateMeetupPage() {
                 </Popover>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="eventEndTime" className="text-sm font-medium">End Time *</Label>
+                <Label htmlFor="eventEndTime" className="text-sm font-medium">
+                  End Time *
+                </Label>
                 <div className="relative">
                   <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="eventEndTime"
                     type="time"
                     value={formData.eventEndTime}
-                    onChange={(e) => handleInputChange("eventEndTime", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("eventEndTime", e.target.value)
+                    }
                     className="pl-10"
                     required
                   />
@@ -318,33 +344,44 @@ export default function CreateMeetupPage() {
             </div>
           </section>
 
-          {/* Venue Information */}
           <section className="space-y-6">
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
                 <MapPin className="h-6 w-6" />
                 Venue Information
               </h2>
-              <p className="text-muted-foreground">Where will your event be held?</p>
+              <p className="text-muted-foreground">
+                Where will your event be held?
+              </p>
             </div>
-
             <div className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="venueName" className="text-sm font-medium">Venue Name *</Label>
+                <Label htmlFor="venueName" className="text-sm font-medium">
+                  Venue Name *
+                </Label>
                 <Input
                   id="venueName"
                   value={formData.venueName}
-                  onChange={(e) => handleInputChange("venueName", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("venueName", e.target.value)
+                  }
                   placeholder="Enter venue name"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="venueGoogleMapsUrl" className="text-sm font-medium">Google Maps URL *</Label>
+                <Label
+                  htmlFor="venueGoogleMapsUrl"
+                  className="text-sm font-medium"
+                >
+                  Google Maps URL *
+                </Label>
                 <Input
                   id="venueGoogleMapsUrl"
                   value={formData.venueGoogleMapsUrl}
-                  onChange={(e) => handleInputChange("venueGoogleMapsUrl", e.target.value)}
+                  onChange={(e) =>
+                    handleInputChange("venueGoogleMapsUrl", e.target.value)
+                  }
                   placeholder="https://maps.google.com/..."
                   required
                 />
@@ -352,41 +389,48 @@ export default function CreateMeetupPage() {
             </div>
           </section>
 
-          {/* Pricing and Capacity */}
           <section className="space-y-6">
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
                 <DollarSign className="h-6 w-6" />
                 Pricing and Capacity
               </h2>
-              <p className="text-muted-foreground">Set pricing and attendance limits</p>
+              <p className="text-muted-foreground">
+                Set pricing and attendance limits
+              </p>
             </div>
-
             <div className="space-y-8">
-              {/* Pricing Section */}
               <div className="space-y-4">
                 <div className="flex items-center space-x-3">
                   <Checkbox
                     id="isPaidEvent"
                     checked={formData.isPaidEvent}
-                    onCheckedChange={(checked) => handleInputChange("isPaidEvent", checked)}
+                    onCheckedChange={(checked) =>
+                      handleInputChange("isPaidEvent", checked)
+                    }
                     className="h-5 w-5"
                   />
-                  <Label htmlFor="isPaidEvent" className="text-base font-medium cursor-pointer">
+                  <Label
+                    htmlFor="isPaidEvent"
+                    className="text-base font-medium cursor-pointer"
+                  >
                     This is a paid event
                   </Label>
                 </div>
-
                 {formData.isPaidEvent && (
                   <div className="space-y-2 ml-8">
-                    <Label htmlFor="eventCost" className="text-sm font-medium">Event Cost ($) *</Label>
+                    <Label htmlFor="eventCost" className="text-sm font-medium">
+                      Event Cost ($) *
+                    </Label>
                     <Input
                       id="eventCost"
                       type="number"
                       step="0.01"
                       min="0"
                       value={formData.eventCost}
-                      onChange={(e) => handleInputChange("eventCost", e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("eventCost", e.target.value)
+                      }
                       placeholder="0.00"
                       required={formData.isPaidEvent}
                     />
@@ -394,29 +438,39 @@ export default function CreateMeetupPage() {
                 )}
               </div>
 
-              {/* Capacity Section */}
               <div className="space-y-4">
                 <div className="flex items-center space-x-3">
                   <Checkbox
                     id="hasLimitedCapacity"
                     checked={formData.hasLimitedCapacity}
-                    onCheckedChange={(checked) => handleInputChange("hasLimitedCapacity", checked)}
+                    onCheckedChange={(checked) =>
+                      handleInputChange("hasLimitedCapacity", checked)
+                    }
                     className="h-5 w-5"
                   />
-                  <Label htmlFor="hasLimitedCapacity" className="text-base font-medium cursor-pointer">
+                  <Label
+                    htmlFor="hasLimitedCapacity"
+                    className="text-base font-medium cursor-pointer"
+                  >
                     Limited capacity
                   </Label>
                 </div>
-
                 {formData.hasLimitedCapacity && (
                   <div className="space-y-2 ml-8">
-                    <Label htmlFor="eventCapacity" className="text-sm font-medium">Maximum Capacity *</Label>
+                    <Label
+                      htmlFor="eventCapacity"
+                      className="text-sm font-medium"
+                    >
+                      Maximum Capacity *
+                    </Label>
                     <Input
                       id="eventCapacity"
                       type="number"
                       min="1"
                       value={formData.eventCapacity}
-                      onChange={(e) => handleInputChange("eventCapacity", e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("eventCapacity", e.target.value)
+                      }
                       placeholder="50"
                       required={formData.hasLimitedCapacity}
                     />
@@ -424,16 +478,20 @@ export default function CreateMeetupPage() {
                 )}
               </div>
 
-              {/* Approval Section */}
               <div className="space-y-4">
                 <div className="flex items-center space-x-3">
                   <Checkbox
                     id="requireApproval"
                     checked={formData.requireApproval}
-                    onCheckedChange={(checked) => handleInputChange("requireApproval", checked)}
+                    onCheckedChange={(checked) =>
+                      handleInputChange("requireApproval", checked)
+                    }
                     className="h-5 w-5"
                   />
-                  <Label htmlFor="requireApproval" className="text-base font-medium cursor-pointer">
+                  <Label
+                    htmlFor="requireApproval"
+                    className="text-base font-medium cursor-pointer"
+                  >
                     Require approval for attendees
                   </Label>
                 </div>
@@ -441,12 +499,8 @@ export default function CreateMeetupPage() {
             </div>
           </section>
 
-          {/* Submit Button */}
           <div className="flex justify-end pt-8">
-            <Button
-              type="submit"
-              disabled={loading}
-            >
+            <Button type="submit" disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -462,7 +516,6 @@ export default function CreateMeetupPage() {
           </div>
         </form>
 
-        {/* Alerts */}
         {error && (
           <Alert className="mt-8 border-destructive/50 bg-destructive/10">
             <XCircle className="h-4 w-4 text-destructive" />

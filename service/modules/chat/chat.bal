@@ -1,71 +1,59 @@
-import 'service.utils;
-
 import ballerina/log;
 import ballerina/sql;
 import ballerina/time;
 import ballerina/uuid;
 import ballerina/websocket;
 
-// active websocket connections
-map<websocket:Caller[]> meetupConnections = {};
-map<websocket:Caller[]> cityConnections = {};
+isolated map<websocket:Caller[]> meetupConnections = {};
+isolated map<websocket:Caller[]> cityConnections = {};
 
 listener websocket:Listener chatListener = new (9090);
 
-service /chat on chatListener {
-    resource function get .() returns websocket:Service|websocket:UpgradeError {
+isolated service /chat on chatListener {
+    isolated resource function get .() returns websocket:Service|websocket:UpgradeError {
         log:printInfo("WebSocket upgrade request received for /chat/");
         return new ChatWebSocketService();
     }
 }
 
+// Each instance is per-connection, so fields are not shared across connections
 service class ChatWebSocketService {
     *websocket:Service;
     private string? meetupId = ();
     private string? cityId = ();
-    private string? userId = ();
-    private string? userName = ();
-
-    public function init() {
-    }
 
     remote function onOpen(websocket:Caller caller) returns websocket:Error? {
-        log:printInfo("WebSocket connection opened successfully");
+        log:printInfo("WebSocket connection opened");
         return;
     }
 
     remote function onTextMessage(websocket:Caller caller, string text) returns websocket:Error? {
-        log:printInfo("Received message: " + text);
-
         json|error messageJson = text.fromJsonString();
         if messageJson is error {
-            log:printError("Invalid JSON message: " + messageJson.message());
+            log:printError("Invalid message: " + messageJson.message());
             return;
         }
-
         WebSocketMessage|error wsMessage = messageJson.cloneWithType();
         if wsMessage is error {
             log:printError("Invalid message format: " + wsMessage.message());
             return;
         }
-
         if wsMessage.'type == "join" {
             check self.handleJoinRoom(caller, wsMessage.data);
         } else if wsMessage.'type == "message" {
             check self.handleChatMessage(caller, wsMessage.data);
         }
-
         return;
     }
 
     remote function onClose(websocket:Caller caller, int statusCode, string reason) returns websocket:Error? {
         if self.meetupId is string {
-            self.removeMeetupConnection(self.meetupId ?: "", caller);
+            removeMeetupConnection(self.meetupId ?: "", caller);
         }
         if self.cityId is string {
-            self.removeCityConnection(self.cityId ?: "", caller);
+            removeCityConnection(self.cityId ?: "", caller);
         }
-        log:printInfo("WebSocket connection closed with status: " + statusCode.toString());
+        log:printInfo("WebSocket connection closed: " + statusCode.toString());
         return;
     }
 
@@ -80,24 +68,19 @@ service class ChatWebSocketService {
             log:printError("Invalid join message: " + joinMessage.message());
             return;
         }
-
-        self.userId = joinMessage.userId;
-        self.userName = joinMessage.userName;
-
         if joinMessage.meetupId is string {
-            self.meetupId = joinMessage.meetupId;
-            self.addMeetupConnection(joinMessage.meetupId ?: "", caller);
-            string confirmationMessage = string `{"type":"joined","data":{"meetupId":"${joinMessage.meetupId ?: ""}","message":"Successfully joined meetup chat"}}`;
-            check caller->writeTextMessage(confirmationMessage);
-            log:printInfo(string `User ${joinMessage.userName} joined meetup ${joinMessage.meetupId ?: ""} chat`);
+            string meetupIdVal = joinMessage.meetupId ?: "";
+            self.meetupId = meetupIdVal;
+            addMeetupConnection(meetupIdVal, caller);
+            check caller->writeTextMessage(string `{"type":"joined","data":{"meetupId":"${meetupIdVal}","message":"Successfully joined meetup chat"}}`);
+            log:printInfo(string `User ${joinMessage.userName} joined meetup ${meetupIdVal}`);
         } else if joinMessage.cityId is string {
-            self.cityId = joinMessage.cityId;
-            self.addCityConnection(joinMessage.cityId ?: "", caller);
-            string confirmationMessage = string `{"type":"joined","data":{"cityId":"${joinMessage.cityId ?: ""}","message":"Successfully joined city chat"}}`;
-            check caller->writeTextMessage(confirmationMessage);
-            log:printInfo(string `User ${joinMessage.userName} joined city ${joinMessage.cityId ?: ""} chat`);
+            string cityIdVal = joinMessage.cityId ?: "";
+            self.cityId = cityIdVal;
+            addCityConnection(cityIdVal, caller);
+            check caller->writeTextMessage(string `{"type":"joined","data":{"cityId":"${cityIdVal}","message":"Successfully joined city chat"}}`);
+            log:printInfo(string `User ${joinMessage.userName} joined city ${cityIdVal}`);
         }
-
         return;
     }
 
@@ -112,155 +95,128 @@ service class ChatWebSocketService {
             log:printError("Failed to save chat message: " + savedMessage.message());
             return;
         }
-
         if chatData.meetupId is string {
-            self.broadcastToMeetup(chatData.meetupId ?: "", savedMessage);
+            broadcastToMeetup(chatData.meetupId ?: "", savedMessage);
         } else if chatData.cityId is string {
-            self.broadcastToCity(chatData.cityId ?: "", savedMessage);
+            broadcastToCity(chatData.cityId ?: "", savedMessage);
         }
         return;
     }
+}
 
-    private function addMeetupConnection(string meetupId, websocket:Caller caller) {
-        if meetupConnections.hasKey(meetupId) {
-            websocket:Caller[] connections = meetupConnections.get(meetupId);
-            connections.push(caller);
-            meetupConnections[meetupId] = connections;
-        } else {
-            meetupConnections[meetupId] = [caller];
-        }
+isolated function addMeetupConnection(string meetupId, websocket:Caller caller) {
+    lock {
+        meetupConnections[meetupId] = meetupConnections.hasKey(meetupId)
+            ? [...meetupConnections.get(meetupId), caller] : [caller];
     }
+}
 
-    private function removeMeetupConnection(string meetupId, websocket:Caller caller) {
+isolated function removeMeetupConnection(string meetupId, websocket:Caller caller) {
+    lock {
         if meetupConnections.hasKey(meetupId) {
-            websocket:Caller[] connections = meetupConnections.get(meetupId);
-            websocket:Caller[] updatedConnections = [];
-
-            foreach websocket:Caller conn in connections {
-                if conn !== caller {
-                    updatedConnections.push(conn);
-                }
-            }
-
-            if updatedConnections.length() > 0 {
-                meetupConnections[meetupId] = updatedConnections;
+            websocket:Caller[] updated = meetupConnections.get(meetupId).filter(c => c !== caller);
+            if updated.length() > 0 {
+                meetupConnections[meetupId] = updated;
             } else {
                 _ = meetupConnections.remove(meetupId);
             }
         }
     }
+}
 
-    private function addCityConnection(string cityId, websocket:Caller caller) {
-        if cityConnections.hasKey(cityId) {
-            websocket:Caller[] connections = cityConnections.get(cityId);
-            connections.push(caller);
-            cityConnections[cityId] = connections;
-        } else {
-            cityConnections[cityId] = [caller];
-        }
+isolated function addCityConnection(string cityId, websocket:Caller caller) {
+    lock {
+        cityConnections[cityId] = cityConnections.hasKey(cityId)
+            ? [...cityConnections.get(cityId), caller] : [caller];
     }
+}
 
-    private function removeCityConnection(string cityId, websocket:Caller caller) {
+isolated function removeCityConnection(string cityId, websocket:Caller caller) {
+    lock {
         if cityConnections.hasKey(cityId) {
-            websocket:Caller[] connections = cityConnections.get(cityId);
-            websocket:Caller[] updatedConnections = [];
-
-            foreach websocket:Caller conn in connections {
-                if conn !== caller {
-                    updatedConnections.push(conn);
-                }
-            }
-
-            if updatedConnections.length() > 0 {
-                cityConnections[cityId] = updatedConnections;
+            websocket:Caller[] updated = cityConnections.get(cityId).filter(c => c !== caller);
+            if updated.length() > 0 {
+                cityConnections[cityId] = updated;
             } else {
                 _ = cityConnections.remove(cityId);
             }
         }
     }
+}
 
-    private function broadcastToMeetup(string meetupId, ChatMessage message) {
+isolated function broadcastToMeetup(string meetupId, ChatMessage message) {
+    string payload = string `{"type":"message","data":${message.toJsonString()}}`;
+    lock {
         if meetupConnections.hasKey(meetupId) {
-            websocket:Caller[] connections = meetupConnections.get(meetupId);
-            string messageJson = string `{"type":"message","data":${message.toJsonString()}}`;
-
-            foreach websocket:Caller conn in connections {
-                var result = conn->writeTextMessage(messageJson);
-                if result is websocket:Error {
-                    log:printError("Failed to send message to client: " + result.message());
-                }
-            }
-        }
-    }
-
-    private function broadcastToCity(string cityId, ChatMessage message) {
-        if cityConnections.hasKey(cityId) {
-            websocket:Caller[] connections = cityConnections.get(cityId);
-            string messageJson = string `{"type":"message","data":${message.toJsonString()}}`;
-
-            foreach websocket:Caller conn in connections {
-                var result = conn->writeTextMessage(messageJson);
-                if result is websocket:Error {
-                    log:printError("Failed to send message to client: " + result.message());
+            foreach websocket:Caller conn in meetupConnections.get(meetupId) {
+                websocket:Error? err = conn->writeTextMessage(payload);
+                if err is websocket:Error {
+                    log:printError("Failed to send message: " + err.message());
                 }
             }
         }
     }
 }
 
-public function saveChatMessage(ChatMessageData chatData) returns ChatMessage|error {
+isolated function broadcastToCity(string cityId, ChatMessage message) {
+    string payload = string `{"type":"message","data":${message.toJsonString()}}`;
+    lock {
+        if cityConnections.hasKey(cityId) {
+            foreach websocket:Caller conn in cityConnections.get(cityId) {
+                websocket:Error? err = conn->writeTextMessage(payload);
+                if err is websocket:Error {
+                    log:printError("Failed to send message: " + err.message());
+                }
+            }
+        }
+    }
+}
+
+public isolated function saveChatMessage(ChatMessageData chatData) returns ChatMessage|error {
     string messageId = uuid:createType1AsString();
     string timestamp = time:utcNow().toString();
 
     if chatData.meetupId is string {
-        // Save to meetup chat table
         string meetupIdVal = <string>chatData.meetupId;
-        utils:ChatMessageInsert messageInsert = {
-            messageId: messageId,
-            meetupId: meetupIdVal,
-            userId: chatData.userId,
-            userName: chatData.userName,
-            message: chatData.message,
-            createdAt: timestamp
-        };
-
-        sql:ExecutionResult|sql:Error dbResult = utils:insertChatMessage(messageInsert);
+        sql:ExecutionResult|sql:Error dbResult = insertChatMessage({
+                                                                       messageId,
+                                                                       meetupId: meetupIdVal,
+                                                                       userId: chatData.userId,
+                                                                       userName: chatData.userName,
+                                                                       message: chatData.message,
+                                                                       createdAt: timestamp
+                                                                   });
         if dbResult is sql:Error {
             return error("Failed to save meetup chat message: " + dbResult.message());
         }
-
         return {
-            messageId: messageId,
+            messageId,
             meetupId: meetupIdVal,
             userId: chatData.userId,
             userName: chatData.userName,
             message: chatData.message,
-            timestamp: timestamp
+            timestamp
         };
     } else if chatData.cityId is string {
-        // Save to city chat table
         string cityIdVal = <string>chatData.cityId;
-        utils:CityChatMessageInsert messageInsert = {
-            messageId: messageId,
-            cityId: cityIdVal,
-            userId: chatData.userId,
-            userName: chatData.userName,
-            message: chatData.message,
-            createdAt: timestamp
-        };
-
-        sql:ExecutionResult|sql:Error dbResult = utils:insertCityChatMessage(messageInsert);
+        sql:ExecutionResult|sql:Error dbResult = insertCityChatMessage({
+                                                                           messageId,
+                                                                           cityId: cityIdVal,
+                                                                           userId: chatData.userId,
+                                                                           userName: chatData.userName,
+                                                                           message: chatData.message,
+                                                                           createdAt: timestamp
+                                                                       });
         if dbResult is sql:Error {
             return error("Failed to save city chat message: " + dbResult.message());
         }
-
         return {
-            messageId: messageId,
+            messageId,
             cityId: cityIdVal,
             userId: chatData.userId,
             userName: chatData.userName,
             message: chatData.message,
-            timestamp: timestamp
+            timestamp
         };
     }
 
@@ -268,45 +224,35 @@ public function saveChatMessage(ChatMessageData chatData) returns ChatMessage|er
 }
 
 public isolated function getChatHistory(string meetupId) returns ChatHistoryResponse|error {
-    utils:ChatMessageRecord[]|sql:Error dbResult = utils:getChatMessagesByMeetupId(meetupId);
+    ChatMessageRecord[]|sql:Error dbResult = getChatMessagesByMeetupId(meetupId);
     if dbResult is sql:Error {
         return {success: false, message: "Failed to fetch chat history: " + dbResult.message()};
     }
-
-    ChatMessage[] messages = [];
-    foreach utils:ChatMessageRecord msgRecord in dbResult {
-        ChatMessage message = {
-            messageId: msgRecord.message_id,
-            meetupId: msgRecord?.meetup_id,
-            userId: msgRecord.user_id,
-            userName: msgRecord.user_name,
-            message: msgRecord.message,
-            timestamp: msgRecord.created_at
+    ChatMessage[] messages = from ChatMessageRecord r in dbResult
+        select {
+            messageId: r.message_id,
+            meetupId: r?.meetup_id,
+            userId: r.user_id,
+            userName: r.user_name,
+            message: r.message,
+            timestamp: r.created_at
         };
-        messages.push(message);
-    }
-
     return {success: true, message: "Chat history fetched successfully", data: messages};
 }
 
 public isolated function getCityChatHistory(string cityId) returns ChatHistoryResponse|error {
-    utils:CityChatMessageRecord[]|sql:Error dbResult = utils:getCityChatMessagesByCityId(cityId);
+    CityChatMessageRecord[]|sql:Error dbResult = getCityChatMessagesByCityId(cityId);
     if dbResult is sql:Error {
         return {success: false, message: "Failed to fetch city chat history: " + dbResult.message()};
     }
-
-    ChatMessage[] messages = [];
-    foreach utils:CityChatMessageRecord msgRecord in dbResult {
-        ChatMessage message = {
-            messageId: msgRecord.message_id,
-            cityId: msgRecord.city_id,
-            userId: msgRecord.user_id,
-            userName: msgRecord.user_name,
-            message: msgRecord.message,
-            timestamp: msgRecord.created_at
+    ChatMessage[] messages = from CityChatMessageRecord r in dbResult
+        select {
+            messageId: r.message_id,
+            cityId: r.city_id,
+            userId: r.user_id,
+            userName: r.user_name,
+            message: r.message,
+            timestamp: r.created_at
         };
-        messages.push(message);
-    }
-
     return {success: true, message: "City chat history fetched successfully", data: messages};
 }

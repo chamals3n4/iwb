@@ -90,7 +90,7 @@ public isolated function sendSMS(string toNumber, string message) returns error?
     log:printInfo("SMS sent successfully to: " + toNumber);
 }
 
-public function notifyNearbyUsers(float incidentLat, float incidentLon, string incidentType, string description) {
+public isolated function notifyNearbyUsers(float incidentLat, float incidentLon, string incidentType, string description) {
     worker notificationWorker {
         utils:UserRecord[]|error nearbyUsers = getUsersWithinRadius(incidentLat, incidentLon, 1.0);
 
